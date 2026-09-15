@@ -1,5 +1,7 @@
 # Subscart - Meal Plan & Subscription Management App
 
+> 📺 **Video Walkthrough**: [**Watch the Full Video Walkthrough on Google Drive**](https://drive.google.com/file/d/10WIAfA099wkx-dpOfy6zU5ktrkroMs4n/view?usp=sharing)
+
 A modern, offline-first Flutter application built with **Clean Architecture** and **GetX** for managing recurring meal subscriptions, daily order schedules, cross-date batch meal swaps, order moves, delivery rescheduling, and automated cut-off notices.
 
 ---
@@ -88,8 +90,8 @@ lib/
 
 ## 🤖 Use of AI Disclosure
 
-In compliance with transparency guidelines, the following AI tools and models were used during the creation of this project:
-- **Code Development & Logic**: Built with the **AntiGravity model (Gemini 3.7 Flash)** for Clean Architecture modeling, GetX state management, batch usecase implementations, widget tree optimizations, and unit test suites.
+I am willingly and proactively disclosing the use of AI in the development of this project:
+- **Code Development & Logic**: Developed with the **AntiGravity model (Gemini 3.7 Flash)** for Clean Architecture modeling, GetX state management, batch usecase implementations, widget tree optimizations, and unit test suites.
 - **Frontend & UI Aesthetics**: User interface layout concepts, typography, spacing tokens, and design specifications were crafted using **Google Stitch**.
 
 ---
