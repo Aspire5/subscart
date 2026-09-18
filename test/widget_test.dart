@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:subscart/data/models/daily_schedule_model.dart';
 import 'package:subscart/data/models/meal_item_model.dart';
 import 'package:subscart/data/models/meal_order_model.dart';
 import 'package:subscart/data/models/vendor_subscription_model.dart';
+import 'package:subscart/domain/entities/daily_schedule.dart';
 import 'package:subscart/domain/entities/meal_item.dart';
 import 'package:subscart/domain/entities/meal_order.dart';
 import 'package:subscart/domain/entities/vendor_subscription.dart';
@@ -17,6 +19,8 @@ import 'package:subscart/domain/usecases/skip_meal_items_batch_usecase.dart';
 import 'package:subscart/domain/usecases/swap_meal_item_usecase.dart';
 import 'package:subscart/domain/usecases/toggle_delivery_slot_usecase.dart';
 import 'package:subscart/presentation/controllers/schedule_controller.dart';
+import 'package:subscart/presentation/views/widgets/move_bottom_sheet.dart';
+import 'package:subscart/presentation/views/widgets/swap_bottom_sheet.dart';
 import 'fixtures/mock_test_data.dart';
 
 /// In-memory repository fake used for testing domain use cases and controller state.
@@ -845,6 +849,144 @@ void main() {
       // Should take at least 400ms to eliminate visual blink
       expect(stopwatch.elapsedMilliseconds >= 400, isTrue);
       expect(controller.isMutating.value, isFalse);
+    });
+
+    testWidgets(
+        'SwapBottomSheet renders Cut-off passed badge instead of Swap button for past cutoff meals',
+        (tester) async {
+      const sourceItem = MealItem(
+        id: 'source_item_1',
+        name: 'Saturday Burger',
+        calories: 450,
+        fatGrams: 15,
+        proteinGrams: 25,
+        carbGrams: 45,
+        imageUrl: '',
+      );
+
+      const sourceOrder = MealOrder(
+        id: 'ord_sat_1',
+        orderNumber: 1,
+        orderType: 'Lunch',
+        location: 'Home',
+        timeWindow: '12:00 PM',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 11:00 AM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [sourceItem],
+      );
+
+      const targetPastCutoffMeal = MealItem(
+        id: 'target_past_item',
+        name: 'Greek Yogurt Berry Bowl',
+        calories: 280,
+        fatGrams: 5,
+        proteinGrams: 12,
+        carbGrams: 35,
+        imageUrl: '',
+      );
+
+      const targetPastCutoffOrder = MealOrder(
+        id: 'ord_fri_1',
+        orderNumber: 1,
+        orderType: 'Lunch',
+        location: 'Home',
+        timeWindow: '12:00 PM',
+        isSlotActive: true,
+        cutoffNotice: 'Cut-off passed',
+        isPastCutoff: true,
+        previewImageUrl: '',
+        items: [targetPastCutoffMeal],
+      );
+
+      final targetDate = DateTime(2026, 9, 18);
+      final scheduleWithPastCutoff = DailySchedule(
+        date: targetDate,
+        dayOfWeek: 'Fri',
+        dayNumber: 18,
+        orders: [targetPastCutoffOrder],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SwapBottomSheet(
+              sourceItems: [
+                SelectedSwapSource(
+                  item: sourceItem,
+                  order: sourceOrder,
+                  date: DateTime(2026, 9, 19),
+                ),
+              ],
+              availableDays: [scheduleWithPastCutoff],
+              onAllSwapsConfirmed: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify that the 'Cut-off passed' badge appears and NO 'Swap' button is rendered for this item
+      expect(find.text('Cut-off passed'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Swap'), findsNothing);
+    });
+
+    testWidgets(
+        'MoveBottomSheet disables past cutoff order slot and displays lock icon',
+        (tester) async {
+      const pastOrder = MealOrder(
+        id: 'ord_target_1',
+        orderNumber: 1,
+        orderType: 'Lunch',
+        location: 'Home',
+        timeWindow: '12:00 PM',
+        isSlotActive: true,
+        cutoffNotice: 'Cut-off passed',
+        isPastCutoff: true,
+        previewImageUrl: '',
+        items: [],
+      );
+
+      const futureOrder = MealOrder(
+        id: 'ord_target_2',
+        orderNumber: 2,
+        orderType: 'Dinner',
+        location: 'Home',
+        timeWindow: '8:00 PM',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 6:00 PM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [],
+      );
+
+      final targetDate = DateTime(2026, 9, 18);
+      final schedule = DailySchedule(
+        date: targetDate,
+        dayOfWeek: 'Fri',
+        dayNumber: 18,
+        orders: [pastOrder, futureOrder],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MoveBottomSheet(
+              currentDate: DateTime(2026, 9, 19),
+              availableDays: [schedule],
+              itemCount: 1,
+              onMoveConfirmed: (_, __) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify that the lock icon is shown for the closed slot (Order 1)
+      expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+      expect(find.text('Order 1'), findsOneWidget);
+      expect(find.text('Order 2'), findsOneWidget);
     });
   });
 }

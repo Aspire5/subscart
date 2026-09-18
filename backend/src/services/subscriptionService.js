@@ -441,6 +441,24 @@ class SubscriptionService {
   }
 
   /**
+   * Helper to determine normalized 24-hour start time for chronological sorting.
+   */
+  _parseOrderStartTime(timeWindow, slotMap) {
+    if (!timeWindow) return '99:99';
+    const matched = slotMap.get(timeWindow.toLowerCase().trim());
+    if (matched?.startTime) return matched.startTime;
+    const match = timeWindow.toLowerCase().match(/(\d+):?(\d+)?\s*(am|pm)/);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2] ? parseInt(match[2], 10) : 0;
+      if (match[3] === 'pm' && h < 12) h += 12;
+      if (match[3] === 'am' && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    return '99:99';
+  }
+
+  /**
    * Formats the Prisma vendor aggregate into the exact JSON structure expected by the Flutter app.
    * Filters out past dates and flags today's orders whose cutoff has passed.
    */
@@ -484,11 +502,18 @@ class SubscriptionService {
         const scheduleDateStr = schedule.date.toISOString().split('T')[0];
         const isToday = getDateRelationToVendorToday(scheduleDateStr, timezone) === 'today';
 
+        // Sort orders chronologically by slot delivery start time
+        const sortedOrders = [...schedule.orders].sort((a, b) => {
+          const timeA = this._parseOrderStartTime(a.timeWindow, slotMap);
+          const timeB = this._parseOrderStartTime(b.timeWindow, slotMap);
+          return timeA.localeCompare(timeB) || (a.orderNumber - b.orderNumber);
+        });
+
         return {
           date: schedule.date.toISOString(),
           dayOfWeek: schedule.dayOfWeek,
           dayNumber: schedule.dayNumber,
-          orders: schedule.orders.map((order) => {
+          orders: sortedOrders.map((order) => {
             let isPastCutoff = false;
             let displayCutoffNotice = order.cutoffNotice;
 

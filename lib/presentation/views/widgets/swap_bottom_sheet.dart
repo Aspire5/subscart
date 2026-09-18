@@ -105,6 +105,8 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
     MealOrder targetOrder,
     MealItem targetItem,
   ) {
+    if (targetOrder.isPastCutoff) return;
+
     final source = _currentSourceItem;
     _pairedSwaps[source.item.id] = CompletedSwapPair(
       source: source,
@@ -456,67 +458,109 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
                         DateFormatter.isSameDay(
                             existingPair!.targetDate, _selectedTargetDate);
 
+                    final isCutoffPassed = order.isPastCutoff;
+
                     return Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isCurrentPaired
-                            ? const Color(0x0A111827)
-                            : AppColors.chipBackground,
+                        color: isCutoffPassed
+                            ? const Color(0xFFF9FAFB)
+                            : (isCurrentPaired
+                                ? const Color(0x0A111827)
+                                : AppColors.chipBackground),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isCurrentPaired
-                              ? AppColors.primaryDark
-                              : AppColors.chipBorder,
+                          color: isCutoffPassed
+                              ? AppColors.subtleBorder
+                              : (isCurrentPaired
+                                  ? AppColors.primaryDark
+                                  : AppColors.chipBorder),
                           width: isCurrentPaired ? 1.5 : 0.8,
                         ),
                       ),
                       child: Row(
                         children: [
-                          // Thumbnail
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.subtleBorder),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: CachedNetworkImage(
-                              imageUrl: item.imageUrl,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) =>
-                                  const Icon(Icons.fastfood, size: 20),
+                          // Thumbnail (dimmed if past cutoff)
+                          Opacity(
+                            opacity: isCutoffPassed ? 0.6 : 1.0,
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.subtleBorder),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: CachedNetworkImage(
+                                imageUrl: item.imageUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    const Icon(Icons.fastfood, size: 20),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
 
-                          // Details
+                          // Details (dimmed if past cutoff)
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.name,
-                                  style: AppTextStyles.itemTitle.copyWith(
-                                    fontSize: 13,
+                            child: Opacity(
+                              opacity: isCutoffPassed ? 0.6 : 1.0,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: AppTextStyles.itemTitle.copyWith(
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Order ${order.orderNumber} • ${item.calories} kcal',
-                                  style: AppTextStyles.helperText.copyWith(
-                                    color: AppColors.textSecondary,
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Order ${order.orderNumber} • ${item.calories} kcal',
+                                    style: AppTextStyles.helperText.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
 
-                          // Selection Action
-                          if (isAlreadyPairedWithOther)
+                          // Selection Action: Cut-off passed vs Paired vs Swap
+                          if (isCutoffPassed)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: const Color(0xFFFDE68A), width: 0.8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(
+                                    Icons.history_toggle_off_rounded,
+                                    size: 11,
+                                    color: Color(0xFFD97706),
+                                  ),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Cut-off passed',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (isAlreadyPairedWithOther)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),

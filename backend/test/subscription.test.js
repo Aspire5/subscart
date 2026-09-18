@@ -125,3 +125,22 @@ test('Modifying an order past its cutoff throws AppError with statusCode 400', a
   }
 });
 
+test('Orders within daily schedules are sorted chronologically by delivery start time', async () => {
+  const sub = await subscriptionService.getSubscription();
+  assert.ok(sub.schedules.length > 0);
+  for (const schedule of sub.schedules) {
+    if (schedule.orders.length > 1) {
+      for (let i = 0; i < schedule.orders.length - 1; i++) {
+        const orderA = schedule.orders[i];
+        const orderB = schedule.orders[i + 1];
+        const timeA = subscriptionService._parseOrderStartTime(orderA.timeWindow, new Map());
+        const timeB = subscriptionService._parseOrderStartTime(orderB.timeWindow, new Map());
+        assert.ok(
+          timeA <= timeB,
+          `Orders must be sorted chronologically: ${orderA.timeWindow} (${timeA}) should be before or equal to ${orderB.timeWindow} (${timeB})`
+        );
+      }
+    }
+  }
+});
+

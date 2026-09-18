@@ -251,7 +251,7 @@ class OrderCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Skip, swap, and move actions are closed for this order.',
+              'Skip, Swap, and Move actions are closed for this order.',
               style: AppTextStyles.bodyNotice.copyWith(
                 color: AppColors.textMuted,
                 fontSize: 12,

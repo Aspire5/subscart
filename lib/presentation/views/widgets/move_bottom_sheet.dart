@@ -31,6 +31,37 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
   int _selectedOrderNumber = 1;
   bool _isSubmitting = false;
 
+  DailySchedule? get _selectedSchedule {
+    for (final s in widget.availableDays) {
+      if (DateFormatter.isSameDay(s.date, _selectedTargetDate)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  bool _isSlotPastCutoff(int slotNum) {
+    final schedule = _selectedSchedule;
+    if (schedule == null) return false;
+    for (final order in schedule.orders) {
+      if (order.orderNumber == slotNum) {
+        return order.isPastCutoff;
+      }
+    }
+    return false;
+  }
+
+  void _adjustSelectedSlotIfPastCutoff() {
+    if (_isSlotPastCutoff(_selectedOrderNumber)) {
+      for (int i = 1; i <= 3; i++) {
+        if (!_isSlotPastCutoff(i)) {
+          _selectedOrderNumber = i;
+          return;
+        }
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -38,11 +69,13 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
         ? widget.availableDays.first.date
         : widget.currentDate.add(const Duration(days: 1));
     _selectedOrderNumber = widget.currentOrder?.orderNumber ?? 1;
+    _adjustSelectedSlotIfPastCutoff();
   }
 
   @override
   Widget build(BuildContext context) {
     final count = widget.itemCount;
+    final allSlotsClosed = [1, 2, 3].every(_isSlotPastCutoff);
     final subtitleText = count != null && count > 0
         ? 'Moving $count selected ${count == 1 ? "meal" : "meals"} from ${DateFormatter.formatShortDay(widget.currentDate)} ${widget.currentDate.day}'
         : (widget.currentOrder != null
@@ -125,6 +158,7 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
                     onTap: () {
                       setState(() {
                         _selectedTargetDate = day.date;
+                        _adjustSelectedSlotIfPastCutoff();
                       });
                     },
                     borderRadius: BorderRadius.circular(14),
@@ -184,43 +218,65 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
 
             Row(
               children: [1, 2, 3].map((slotNum) {
-                final isSelected = _selectedOrderNumber == slotNum;
+                final isPastCutoff = _isSlotPastCutoff(slotNum);
+                final isSelected = !isPastCutoff && _selectedOrderNumber == slotNum;
                 return Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(
                       right: slotNum < 3 ? 8.0 : 0.0,
                     ),
                     child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedOrderNumber = slotNum;
-                        });
-                      },
+                      onTap: isPastCutoff
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedOrderNumber = slotNum;
+                              });
+                            },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         height: 40,
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0x14111827)
-                              : AppColors.chipBackground,
+                          color: isPastCutoff
+                              ? const Color(0xFFF3F4F6)
+                              : (isSelected
+                                  ? const Color(0x14111827)
+                                  : AppColors.chipBackground),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isSelected
-                                ? AppColors.primaryDark
-                                : AppColors.chipBorder,
+                            color: isPastCutoff
+                                ? AppColors.subtleBorder
+                                : (isSelected
+                                    ? AppColors.primaryDark
+                                    : AppColors.chipBorder),
                             width: isSelected ? 1.5 : 0.8,
                           ),
                         ),
                         alignment: Alignment.center,
-                        child: Text(
-                          'Order $slotNum',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? AppColors.primaryDark
-                                : AppColors.textPrimary,
-                          ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (isPastCutoff) ...[
+                              const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 12,
+                                color: AppColors.textMuted,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              'Order $slotNum',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isPastCutoff
+                                    ? AppColors.textMuted
+                                    : (isSelected
+                                        ? AppColors.primaryDark
+                                        : AppColors.textPrimary),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -228,6 +284,26 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
                 );
               }).toList(),
             ),
+            if (allSlotsClosed) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.history_toggle_off_rounded,
+                    size: 13,
+                    color: Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'All slots on this date are closed for modifications.',
+                    style: AppTextStyles.bodyNotice.copyWith(
+                      color: const Color(0xFFD97706),
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Confirm Move Button
@@ -235,7 +311,7 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: _isSubmitting
+                onPressed: (_isSubmitting || allSlotsClosed || _isSlotPastCutoff(_selectedOrderNumber))
                     ? null
                     : () {
                         setState(() => _isSubmitting = true);
