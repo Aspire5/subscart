@@ -45,7 +45,10 @@ abstract class SubscriptionRepository {
     String? targetSlotId,
   });
 
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate);
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  });
 
   Future<VendorSubscription> toggleDeliverySlot({
     required DateTime date,
@@ -56,4 +59,6 @@ abstract class SubscriptionRepository {
   Future<VendorSubscription> pauseSubscription({
     required bool isPaused,
   });
+
+  Future<VendorSubscription> resetData();
 }

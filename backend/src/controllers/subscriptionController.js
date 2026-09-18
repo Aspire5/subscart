@@ -16,6 +16,7 @@ class SubscriptionController {
   async getSlotAvailability(req, res, next) {
     try {
       const targetDate = req.query.targetDate || req.query.date;
+      const excludeOrderId = req.query.excludeOrderId || null;
       if (!targetDate) {
         return res.status(400).json({
           success: false,
@@ -23,7 +24,7 @@ class SubscriptionController {
         });
       }
 
-      const availability = await subscriptionService.getSlotAvailability(targetDate);
+      const availability = await subscriptionService.getSlotAvailability(targetDate, excludeOrderId);
       res.status(200).json({
         success: true,
         data: availability,

@@ -12,10 +12,12 @@ import '../../domain/usecases/move_meal_items_batch_usecase.dart';
 import '../../domain/usecases/move_order_items_usecase.dart';
 import '../../domain/usecases/pause_subscription_usecase.dart';
 import '../../domain/usecases/reschedule_order_usecase.dart';
+import '../../domain/usecases/reset_data_usecase.dart';
 import '../../domain/usecases/skip_meal_item_usecase.dart';
 import '../../domain/usecases/skip_meal_items_batch_usecase.dart';
 import '../../domain/usecases/swap_meal_item_usecase.dart';
 import '../../domain/usecases/toggle_delivery_slot_usecase.dart';
+import '../views/widgets/app_confirmation_dialog.dart';
 import '../views/widgets/move_bottom_sheet.dart';
 import '../views/widgets/reschedule_bottom_sheet.dart';
 import '../views/widgets/swap_bottom_sheet.dart';
@@ -30,6 +32,7 @@ class ScheduleController extends GetxController {
   final RescheduleOrderUseCase rescheduleOrderUseCase;
   final ToggleDeliverySlotUseCase toggleDeliverySlotUseCase;
   final PauseSubscriptionUseCase pauseSubscriptionUseCase;
+  final ResetDataUseCase? resetDataUseCase;
 
   ScheduleController({
     required this.getSubscriptionUseCase,
@@ -41,6 +44,7 @@ class ScheduleController extends GetxController {
     required this.rescheduleOrderUseCase,
     required this.toggleDeliverySlotUseCase,
     required this.pauseSubscriptionUseCase,
+    this.resetDataUseCase,
   });
 
   // Initial full-page load state
@@ -324,7 +328,10 @@ class ScheduleController extends GetxController {
         currentDate: selectedDate.value,
         availableSchedules: sub.schedules,
         onFetchSlotAvailability: (targetDate) =>
-            rescheduleOrderUseCase.getSlotAvailability(targetDate),
+            rescheduleOrderUseCase.getSlotAvailability(
+              targetDate,
+              excludeOrderId: currentOrder.id,
+            ),
         onConfirm: (targetDate, newTimeSlot, slotId) async {
           Get.back();
           await _executeReschedule(
@@ -486,5 +493,48 @@ class ScheduleController extends GetxController {
         ),
       ],
     );
+  }
+
+  void showResetConfirmation(BuildContext context) {
+    AppConfirmationDialog.show(
+      context,
+      title: 'Reset Database?',
+      message:
+          'This will restore all meal plans, orders, and delivery schedules back to the original demo seed data. Any customized changes will be reset.',
+      confirmText: 'Reset Database',
+      cancelText: 'Cancel',
+      icon: Icons.restart_alt_rounded,
+      iconColor: const Color(0xFFDC2626),
+      confirmColor: const Color(0xFFDC2626),
+      onConfirm: () => resetDatabase(),
+    );
+  }
+
+  Future<void> resetDatabase() async {
+    await runWithBlockingLoading(() async {
+      try {
+        final useCase = resetDataUseCase ??
+            (Get.isRegistered<ResetDataUseCase>()
+                ? Get.find<ResetDataUseCase>()
+                : null);
+        if (useCase != null) {
+          final updated = await useCase();
+          subscription.value = updated;
+        } else {
+          await loadSubscriptionData();
+        }
+        selectedItemOrderMap.clear();
+        if (subscription.value != null &&
+            subscription.value!.schedules.isNotEmpty) {
+          selectedDate.value = subscription.value!.schedules.first.date;
+        }
+        _showFeedbackSnackBar(
+          title: 'Database Reset',
+          message: 'Database reset to initial seed data successfully',
+        );
+      } catch (e) {
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to reset database'));
+      }
+    }, message: 'Resetting database to initial state...');
   }
 }

@@ -5,7 +5,10 @@ import '../models/vendor_subscription_model.dart';
 
 abstract class SubscriptionRemoteDataSource {
   Future<VendorSubscriptionModel> getSubscription();
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate);
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  });
   Future<VendorSubscriptionModel> rescheduleOrder({
     required String orderId,
     required DateTime targetDate,
@@ -59,12 +62,18 @@ class SubscriptionRemoteDataSourceImpl implements SubscriptionRemoteDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) async {
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  }) async {
     final dateStr =
         '${targetDate.year.toString().padLeft(4, '0')}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
     final response = await _dio.get(
       ApiConstants.slotAvailability,
-      queryParameters: {'targetDate': dateStr},
+      queryParameters: {
+        'targetDate': dateStr,
+        if (excludeOrderId != null) 'excludeOrderId': excludeOrderId,
+      },
     );
     return response.data['data'] as Map<String, dynamic>;
   }

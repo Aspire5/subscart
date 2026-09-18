@@ -35,8 +35,14 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) async {
-    return await _remoteDataSource.getSlotAvailability(targetDate);
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  }) async {
+    return await _remoteDataSource.getSlotAvailability(
+      targetDate,
+      excludeOrderId: excludeOrderId,
+    );
   }
 
   @override
@@ -154,6 +160,13 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required bool isPaused,
   }) async {
     final model = await _remoteDataSource.pauseSubscription(isPaused);
+    await _storageService?.saveSubscription(model.toJson());
+    return model.toEntity();
+  }
+
+  @override
+  Future<VendorSubscription> resetData() async {
+    final model = await _remoteDataSource.resetData();
     await _storageService?.saveSubscription(model.toJson());
     return model.toEntity();
   }

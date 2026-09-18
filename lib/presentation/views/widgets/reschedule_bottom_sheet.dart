@@ -421,19 +421,22 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                                   ),
                                   if (!isAvailable) ...[
                                     const SizedBox(width: 8),
+                                    _buildSlotStatusBadge(slot['reason'] as String?),
+                                  ] else if (isSelected) ...[
+                                    const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF3F4F6),
+                                        color: const Color(0x1A111827),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text(
-                                        'Cut-off passed',
+                                        'Selected',
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
-                                          color: AppColors.textMuted,
+                                          color: AppColors.primaryDark,
                                         ),
                                       ),
                                     ),
@@ -459,7 +462,41 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                 ),
               );
             }),
-            const SizedBox(height: 10),
+            if (!_hasAvailableSlots && !_isLoadingSlots) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'All delivery slots on this date are occupied or closed. You can free up a slot by skipping all meals in an existing order on this day, or pick a different delivery date.',
+                        style: AppTextStyles.bodyNotice.copyWith(
+                          fontSize: 11.5,
+                          color: const Color(0xFF92400E),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ] else ...[
+              const SizedBox(height: 10),
+            ],
 
             // Confirm Button
             SizedBox(
@@ -501,6 +538,46 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlotStatusBadge(String? reason) {
+    final lowerReason = (reason ?? '').toLowerCase();
+    final isOccupied = lowerReason.contains('occupied');
+    final isCutoff = lowerReason.contains('cut-off') || lowerReason.contains('cutoff');
+
+    final String label;
+    final Color bgColor;
+    final Color textColor;
+
+    if (isOccupied) {
+      label = 'Occupied';
+      bgColor = const Color(0xFFEFF6FF);
+      textColor = const Color(0xFF2563EB);
+    } else if (isCutoff) {
+      label = '⏳ Cut-off passed';
+      bgColor = const Color(0xFFFEF3C7);
+      textColor = const Color(0xFFD97706);
+    } else {
+      label = 'Unavailable';
+      bgColor = const Color(0xFFF3F4F6);
+      textColor = AppColors.textMuted;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: textColor,
         ),
       ),
     );

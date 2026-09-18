@@ -51,6 +51,43 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
     return false;
   }
 
+  MealOrder? get _selectedTargetOrder {
+    final schedule = _selectedSchedule;
+    if (schedule == null) return null;
+    for (final order in schedule.orders) {
+      if (order.orderNumber == _selectedOrderNumber) {
+        return order;
+      }
+    }
+    return null;
+  }
+
+  String _defaultTimeWindowForSlot(int slotNum) {
+    switch (slotNum) {
+      case 1:
+        return '8:00 am - 9:00 am';
+      case 2:
+        return '12:30 pm - 1:30 pm';
+      case 3:
+        return '7:30 pm - 8:30 pm';
+      default:
+        return 'Delivery Window';
+    }
+  }
+
+  String _defaultCutoffForSlot(int slotNum) {
+    switch (slotNum) {
+      case 1:
+        return 'Edits allowed until 7:00 AM the day of your Order.';
+      case 2:
+        return 'Edits allowed until 11:00 AM the day of your Order.';
+      case 3:
+        return 'Edits allowed until 6:00 PM the day of your Order.';
+      default:
+        return '';
+    }
+  }
+
   void _adjustSelectedSlotIfPastCutoff() {
     if (_isSlotPastCutoff(_selectedOrderNumber)) {
       for (int i = 1; i <= 3; i++) {
@@ -304,7 +341,18 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
                 ],
               ),
             ],
-            const SizedBox(height: 20),
+
+            // Dynamic Target Order Preview Card
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOutCubic,
+              alignment: Alignment.topCenter,
+              child: _buildTargetOrderPreview(
+                _selectedTargetOrder,
+                _isSlotPastCutoff(_selectedOrderNumber),
+              ),
+            ),
+            const SizedBox(height: 18),
 
             // Confirm Move Button
             SizedBox(
@@ -343,6 +391,236 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTargetOrderPreview(MealOrder? order, bool isPastCutoff) {
+    final hasItems = order != null && order.items.isNotEmpty;
+    final timeWindow = order?.timeWindow ?? _defaultTimeWindowForSlot(_selectedOrderNumber);
+    final cutoffNotice = order?.cutoffNotice ?? _defaultCutoffForSlot(_selectedOrderNumber);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.subtleBorder,
+          width: 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header Row: Time Window badge + Cut-off notice
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: isPastCutoff
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0x14111827),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPastCutoff
+                          ? Icons.history_toggle_off_rounded
+                          : Icons.access_time_rounded,
+                      size: 13,
+                      color: isPastCutoff
+                          ? const Color(0xFFD97706)
+                          : AppColors.primaryDark,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      timeWindow,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: isPastCutoff
+                            ? const Color(0xFFB45309)
+                            : AppColors.primaryDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (isPastCutoff)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Modifications closed',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFDC2626),
+                    ),
+                  ),
+                )
+              else if (cutoffNotice.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    cutoffNotice,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textMuted,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Items section
+          if (hasItems) ...[
+            Row(
+              children: [
+                Text(
+                  'Items in this Order (${order.items.length})',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  '• your moved meals join these',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 52,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: order.items.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, idx) {
+                  final item = order.items[idx];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.subtleBorder.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: item.imageUrl.isNotEmpty
+                              ? Image.network(
+                                  item.imageUrl,
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _buildFallbackThumbnail(),
+                                )
+                              : _buildFallbackThumbnail(),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 120),
+                              child: Text(
+                                item.name,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              '${item.calories} kcal',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.subtleBorder.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.inbox_outlined,
+                    size: 16,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isPastCutoff
+                          ? 'This slot is past its cut-off time.'
+                          : 'Slot is currently empty (0 items) — meals will arrive here.',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallbackThumbnail() {
+    return Container(
+      width: 36,
+      height: 36,
+      color: const Color(0xFFF3F4F6),
+      child: const Icon(
+        Icons.restaurant_menu_rounded,
+        size: 16,
+        color: AppColors.textMuted,
       ),
     );
   }

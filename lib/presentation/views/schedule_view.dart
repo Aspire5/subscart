@@ -64,7 +64,7 @@ class ScheduleView extends GetView<ScheduleController> {
                     planSummary: subscription.planSummary,
                     vendorLogoUrl: subscription.vendorLogoUrl,
                     onBackTap: () {},
-                    onMoreTap: () {},
+                    onResetTap: () => controller.showResetConfirmation(context),
                   ),
 
                   // Scrollable Content

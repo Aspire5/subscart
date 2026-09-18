@@ -9,6 +9,7 @@ import '../../domain/usecases/move_meal_items_batch_usecase.dart';
 import '../../domain/usecases/move_order_items_usecase.dart';
 import '../../domain/usecases/pause_subscription_usecase.dart';
 import '../../domain/usecases/reschedule_order_usecase.dart';
+import '../../domain/usecases/reset_data_usecase.dart';
 import '../../domain/usecases/skip_meal_item_usecase.dart';
 import '../../domain/usecases/skip_meal_items_batch_usecase.dart';
 import '../../domain/usecases/swap_meal_item_usecase.dart';
@@ -41,6 +42,7 @@ class ScheduleBinding extends Bindings {
     Get.lazyPut(() => RescheduleOrderUseCase(repository));
     Get.lazyPut(() => ToggleDeliverySlotUseCase(repository));
     Get.lazyPut(() => PauseSubscriptionUseCase(repository));
+    Get.lazyPut(() => ResetDataUseCase(repository));
 
     // Controller
     Get.lazyPut<ScheduleController>(
@@ -54,6 +56,7 @@ class ScheduleBinding extends Bindings {
         rescheduleOrderUseCase: Get.find<RescheduleOrderUseCase>(),
         toggleDeliverySlotUseCase: Get.find<ToggleDeliverySlotUseCase>(),
         pauseSubscriptionUseCase: Get.find<PauseSubscriptionUseCase>(),
+        resetDataUseCase: Get.find<ResetDataUseCase>(),
       ),
     );
   }

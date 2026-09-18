@@ -19,8 +19,11 @@ import 'package:subscart/domain/usecases/skip_meal_items_batch_usecase.dart';
 import 'package:subscart/domain/usecases/swap_meal_item_usecase.dart';
 import 'package:subscart/domain/usecases/toggle_delivery_slot_usecase.dart';
 import 'package:subscart/presentation/controllers/schedule_controller.dart';
+import 'package:subscart/presentation/views/widgets/app_confirmation_dialog.dart';
 import 'package:subscart/presentation/views/widgets/move_bottom_sheet.dart';
+import 'package:subscart/presentation/views/widgets/reschedule_bottom_sheet.dart';
 import 'package:subscart/presentation/views/widgets/swap_bottom_sheet.dart';
+import 'package:subscart/presentation/views/widgets/top_nav_bar.dart';
 import 'fixtures/mock_test_data.dart';
 
 /// In-memory repository fake used for testing domain use cases and controller state.
@@ -31,7 +34,10 @@ class FakeSubscriptionRepository implements SubscriptionRepository {
   Future<VendorSubscription> getSubscription() async => _data.toEntity();
 
   @override
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) async {
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  }) async {
     return {
       'hasAvailableSlots': true,
       'slots': [
@@ -490,6 +496,11 @@ class FakeSubscriptionRepository implements SubscriptionRepository {
       isPaused: isPaused,
       schedules: _data.schedules,
     );
+    return _data.toEntity();
+  }
+
+  @override
+  Future<VendorSubscription> resetData() async {
     return _data.toEntity();
   }
 }
@@ -987,6 +998,200 @@ void main() {
       expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
       expect(find.text('Order 1'), findsOneWidget);
       expect(find.text('Order 2'), findsOneWidget);
+    });
+
+    testWidgets('MoveBottomSheet displays target order preview with time window, items, and calories',
+        (tester) async {
+      const orderWithMeals = MealOrder(
+        id: 'ord_rich_1',
+        orderNumber: 1,
+        orderType: 'Lunch',
+        location: 'Home',
+        timeWindow: '12:30 pm - 1:30 pm',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 11:00 AM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [
+          MealItem(
+            id: 'm1',
+            name: 'Avocado Green Salad',
+            calories: 320,
+            fatGrams: 14,
+            proteinGrams: 8,
+            carbGrams: 22,
+            imageUrl: '',
+          ),
+        ],
+      );
+
+      final targetDate = DateTime(2026, 9, 20);
+      final schedule = DailySchedule(
+        date: targetDate,
+        dayOfWeek: 'Sun',
+        dayNumber: 20,
+        orders: [orderWithMeals],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MoveBottomSheet(
+              currentDate: DateTime(2026, 9, 19),
+              availableDays: [schedule],
+              itemCount: 1,
+              onMoveConfirmed: (_, __) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Check preview header elements
+      expect(find.text('12:30 pm - 1:30 pm'), findsOneWidget);
+      expect(find.text('Edits allowed until 11:00 AM'), findsOneWidget);
+      expect(find.text('Items in this Order (1)'), findsOneWidget);
+      expect(find.text('Avocado Green Salad'), findsOneWidget);
+      expect(find.text('320 kcal'), findsOneWidget);
+    });
+
+    testWidgets('RescheduleBottomSheet renders Occupied badge for occupied delivery slots',
+        (tester) async {
+      const testOrder = MealOrder(
+        id: 'ord_resched_test',
+        orderNumber: 1,
+        orderType: 'Delivery',
+        location: 'Home',
+        timeWindow: '8:00 am - 9:00 am',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 7:00 AM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RescheduleBottomSheet(
+              order: testOrder,
+              currentDate: DateTime(2026, 9, 20),
+              availableSchedules: const [],
+              onFetchSlotAvailability: (_) async => {
+                'hasAvailableSlots': true,
+                'nextAvailableSlot': {
+                  'id': 'slot_2',
+                  'displayTime': '12:30 pm - 1:30 pm',
+                },
+                'slots': [
+                  {
+                    'id': 'slot_1',
+                    'name': 'Breakfast Window',
+                    'displayTime': '8:00 am - 9:00 am',
+                    'cutoffNotice': 'Edits allowed until 7:00 AM',
+                    'isAvailable': false,
+                    'reason': 'Slot occupied by an existing order',
+                  },
+                  {
+                    'id': 'slot_2',
+                    'name': 'Lunch Window',
+                    'displayTime': '12:30 pm - 1:30 pm',
+                    'cutoffNotice': 'Edits allowed until 11:00 AM',
+                    'isAvailable': true,
+                  },
+                ],
+              },
+              onConfirm: (_, __, ___) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify that the Occupied badge is rendered for slot 1
+      expect(find.text('Occupied'), findsOneWidget);
+      expect(find.text('Selected'), findsOneWidget); // Auto-selected slot 2
+      expect(find.text('12:30 pm - 1:30 pm'), findsOneWidget);
+    });
+
+    testWidgets('TopNavBar displays Reset Database option in popup menu and triggers onResetTap',
+        (tester) async {
+      bool resetTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: TopNavBar(
+              vendorName: 'Daily Green & Gourmet',
+              planSummary: 'Weekly Balanced Diet • 3 Slots Daily',
+              vendorLogoUrl: '',
+              onResetTap: () {
+                resetTapped = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap 3-dots button
+      final moreButton = find.byIcon(Icons.more_horiz);
+      expect(moreButton, findsOneWidget);
+      await tester.tap(moreButton);
+      await tester.pumpAndSettle();
+
+      // Check popup menu item
+      final resetMenuItem = find.text('Reset Database');
+      expect(resetMenuItem, findsOneWidget);
+
+      // Tap reset database
+      await tester.tap(resetMenuItem);
+      await tester.pumpAndSettle();
+
+      expect(resetTapped, true);
+    });
+
+    testWidgets('AppConfirmationDialog renders warning and calls onConfirm when pressed',
+        (tester) async {
+      bool onConfirmCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                AppConfirmationDialog.show(
+                  context,
+                  title: 'Reset Database?',
+                  message: 'This will restore all meal plans back to original demo seed data.',
+                  confirmText: 'Reset Database',
+                  onConfirm: () {
+                    onConfirmCalled = true;
+                  },
+                );
+              },
+              child: const Text('Open Dialog'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open dialog
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pumpAndSettle();
+
+      // Verify dialog contents
+      expect(find.text('Reset Database?'), findsOneWidget);
+      expect(find.text('This will restore all meal plans back to original demo seed data.'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Reset Database'), findsOneWidget);
+
+      // Tap Confirm in dialog
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reset Database'));
+      await tester.pumpAndSettle();
+
+      expect(onConfirmCalled, true);
     });
   });
 }

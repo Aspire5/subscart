@@ -9,6 +9,7 @@ class TopNavBar extends StatelessWidget implements PreferredSizeWidget {
   final String vendorLogoUrl;
   final VoidCallback? onBackTap;
   final VoidCallback? onMoreTap;
+  final VoidCallback? onResetTap;
 
   const TopNavBar({
     super.key,
@@ -17,6 +18,7 @@ class TopNavBar extends StatelessWidget implements PreferredSizeWidget {
     required this.vendorLogoUrl,
     this.onBackTap,
     this.onMoreTap,
+    this.onResetTap,
   });
 
   @override
@@ -64,25 +66,31 @@ class TopNavBar extends StatelessWidget implements PreferredSizeWidget {
                   color: const Color(0xFFF3F4F6),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: CachedNetworkImage(
-                  imageUrl: vendorLogoUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => const Center(
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.textSecondary,
+                child: vendorLogoUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: vendorLogoUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => const Icon(
+                          Icons.restaurant,
+                          size: 20,
+                          color: AppColors.textMuted,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.restaurant,
+                        size: 20,
+                        color: AppColors.textMuted,
                       ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => const Icon(
-                    Icons.restaurant,
-                    size: 20,
-                    color: AppColors.textMuted,
-                  ),
-                ),
               ),
               const SizedBox(width: 10),
 
@@ -109,9 +117,13 @@ class TopNavBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ),
 
-              // More Options Button
-              IconButton(
-                onPressed: onMoreTap ?? () {},
+              // More Options Button / Menu
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'reset') {
+                    onResetTap?.call();
+                  }
+                },
                 icon: const Icon(
                   Icons.more_horiz,
                   color: AppColors.textPrimary,
@@ -120,6 +132,34 @@ class TopNavBar extends StatelessWidget implements PreferredSizeWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 splashRadius: 20,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+                color: AppColors.cardBackground,
+                itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem<String>(
+                    value: 'reset',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.restart_alt_rounded,
+                          size: 18,
+                          color: Color(0xFFDC2626),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Reset Database',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFDC2626),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

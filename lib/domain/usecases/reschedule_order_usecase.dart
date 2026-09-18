@@ -22,7 +22,13 @@ class RescheduleOrderUseCase {
     );
   }
 
-  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) {
-    return _repository.getSlotAvailability(targetDate);
+  Future<Map<String, dynamic>> getSlotAvailability(
+    DateTime targetDate, {
+    String? excludeOrderId,
+  }) {
+    return _repository.getSlotAvailability(
+      targetDate,
+      excludeOrderId: excludeOrderId,
+    );
   }
 }

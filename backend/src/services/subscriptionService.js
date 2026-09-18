@@ -99,8 +99,9 @@ class SubscriptionService {
 
   /**
    * Evaluates delivery slot availability for a given target date against the vendor's local timezone.
+   * Also checks for slot collisions (existing active orders with items on that date).
    */
-  async getSlotAvailability(targetDateInput) {
+  async getSlotAvailability(targetDateInput, excludeOrderId = null) {
     const vendor = await prisma.vendor.findFirst({
       include: {
         slotConfigs: {
@@ -122,6 +123,34 @@ class SubscriptionService {
     const vendorNow = getLocalVendorDateTime(timezone);
     const relation = getDateRelationToVendorToday(targetDate, timezone);
 
+    // Check existing schedule for this target date to detect occupied slots
+    const normalizedTargetDate = normalizeDateToUtcMidnight(targetDate);
+    const existingSchedule = await prisma.dailySchedule.findUnique({
+      where: {
+        vendorId_date: {
+          vendorId: vendor.id,
+          date: normalizedTargetDate,
+        },
+      },
+      include: {
+        orders: {
+          include: {
+            items: true,
+          },
+        },
+      },
+    });
+
+    const occupiedWindows = new Set();
+    if (existingSchedule && existingSchedule.orders) {
+      for (const ord of existingSchedule.orders) {
+        if (excludeOrderId && ord.id === excludeOrderId) continue;
+        if (ord.items && ord.items.length > 0) {
+          occupiedWindows.add(ord.timeWindow.toLowerCase().trim());
+        }
+      }
+    }
+
     const slots = vendor.slotConfigs.map((slot) => {
       let isAvailable = true;
       let reason = null;
@@ -134,6 +163,15 @@ class SubscriptionService {
         if (isCutoffPassed) {
           isAvailable = false;
           reason = `Cut-off time (${slot.cutoffTime} in ${timezone}) has passed`;
+        }
+      }
+
+      if (isAvailable) {
+        const isOccupied = occupiedWindows.has(slot.displayTime.toLowerCase().trim()) ||
+                           occupiedWindows.has(slot.name.toLowerCase().trim());
+        if (isOccupied) {
+          isAvailable = false;
+          reason = 'Slot occupied by an existing order';
         }
       }
 
@@ -190,8 +228,8 @@ class SubscriptionService {
     const normalizedTargetDate = normalizeDateToUtcMidnight(targetDate);
     const targetDateStr = normalizedTargetDate.toISOString().split('T')[0];
 
-    // Check slot availability for the target date
-    const availability = await this.getSlotAvailability(targetDateStr);
+    // Check slot availability for the target date, excluding current order in case it was already on this date
+    const availability = await this.getSlotAvailability(targetDateStr, orderId);
     if (!availability.hasAvailableSlots) {
       throw new AppError(`No available delivery slots remaining on ${targetDateStr}`, 400);
     }
@@ -242,7 +280,11 @@ class SubscriptionService {
           },
         },
         include: {
-          orders: true,
+          orders: {
+            include: {
+              items: true,
+            },
+          },
         },
       });
 
@@ -255,51 +297,52 @@ class SubscriptionService {
             dayNumber: targetDayNumber,
           },
           include: {
-            orders: true,
+            orders: {
+              include: {
+                items: true,
+              },
+            },
           },
         });
       }
 
-      const isSameSchedule = order.scheduleId === targetSchedule.id;
-
-      if (isSameSchedule) {
-        await tx.mealOrder.update({
-          where: { id: orderId },
-          data: {
-            timeWindow: newTimeWindow,
-            cutoffNotice: newCutoffNotice,
-          },
-        });
-      } else {
-        const nextOrderNumber = targetSchedule.orders.length + 1;
-
-        await tx.mealOrder.update({
-          where: { id: orderId },
-          data: {
-            scheduleId: targetSchedule.id,
-            orderNumber: nextOrderNumber,
-            timeWindow: newTimeWindow,
-            cutoffNotice: newCutoffNotice,
-          },
-        });
-
-        // Renumber remaining orders in source schedule
-        const remainingSourceOrders = await tx.mealOrder.findMany({
-          where: { scheduleId: order.scheduleId },
-          orderBy: { orderNumber: 'asc' },
-        });
-
-        for (let i = 0; i < remainingSourceOrders.length; i++) {
-          await tx.mealOrder.update({
-            where: { id: remainingSourceOrders[i].id },
-            data: { orderNumber: i + 1 },
-          });
-        }
+      // Check if target schedule has an occupied slot (another order with items > 0)
+      const existingConflict = targetSchedule.orders.find(
+        (o) =>
+          o.id !== orderId &&
+          o.timeWindow.toLowerCase().trim() === newTimeWindow.toLowerCase().trim() &&
+          o.items &&
+          o.items.length > 0
+      );
+      if (existingConflict) {
+        throw new AppError(
+          `Delivery slot ${newTimeWindow} is already occupied on ${targetDateStr}`,
+          400
+        );
       }
+
+      // Find highest order number on target schedule
+      const maxOrderNumber = targetSchedule.orders.reduce(
+        (max, ord) => (ord.orderNumber > max ? ord.orderNumber : max),
+        0
+      );
+
+      // Reassign order to target schedule with updated window
+      await tx.mealOrder.update({
+        where: { id: orderId },
+        data: {
+          scheduleId: targetSchedule.id,
+          orderNumber: maxOrderNumber + 1,
+          timeWindow: newTimeWindow,
+          cutoffNotice: newCutoffNotice,
+        },
+      });
     });
 
     return this.getSubscription();
   }
+
+
 
   /**
    * Moves selected meal items from their source order(s) to a target order.
@@ -371,6 +414,7 @@ class SubscriptionService {
 
   /**
    * Skips (removes) meal items from an order.
+   * If all items in an order are removed, automatically removes the empty MealOrder.
    */
   async skipMealItems({ orderToItemIdsMap }) {
     if (!orderToItemIdsMap) {
@@ -386,8 +430,23 @@ class SubscriptionService {
       return this.getSubscription();
     }
 
-    await prisma.mealItem.deleteMany({
-      where: { id: { in: itemIds } },
+    await prisma.$transaction(async (tx) => {
+      await tx.mealItem.deleteMany({
+        where: { id: { in: itemIds } },
+      });
+
+      // Check affected orders - if an order has 0 items remaining, auto-remove the empty MealOrder
+      const affectedOrderIds = Object.keys(orderToItemIdsMap);
+      for (const orderId of affectedOrderIds) {
+        const remainingCount = await tx.mealItem.count({
+          where: { orderId },
+        });
+        if (remainingCount === 0) {
+          await tx.mealOrder.delete({
+            where: { id: orderId },
+          });
+        }
+      }
     });
 
     return this.getSubscription();
