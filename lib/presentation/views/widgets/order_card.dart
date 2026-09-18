@@ -257,25 +257,32 @@ class OrderCard extends StatelessWidget {
                 fontSize: 12,
               ),
             ),
-          ] else
-            RichText(
-              text: TextSpan(
-                text: 'Edits allowed until ',
-                style: AppTextStyles.bodyNotice,
-                children: [
-                  TextSpan(
-                    text: _extractCutoffTime(order.cutoffNotice),
-                    style: AppTextStyles.bodyNotice.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+          ] else if (order.cutoffNotice.isNotEmpty)
+            if (order.cutoffNotice.contains('until ') &&
+                order.cutoffNotice.contains(' the day'))
+              RichText(
+                text: TextSpan(
+                  text: 'Edits allowed until ',
+                  style: AppTextStyles.bodyNotice,
+                  children: [
+                    TextSpan(
+                      text: _extractCutoffTime(order.cutoffNotice),
+                      style: AppTextStyles.bodyNotice.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  TextSpan(
-                    text: _extractCutoffRest(order.cutoffNotice),
-                  ),
-                ],
+                    TextSpan(
+                      text: _extractCutoffRest(order.cutoffNotice),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Text(
+                order.cutoffNotice,
+                style: AppTextStyles.bodyNotice,
               ),
-            ),
           const SizedBox(height: 10),
           Container(height: 1, color: AppColors.divider),
 
