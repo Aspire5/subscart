@@ -4,6 +4,7 @@ import {
   getDateRelationToVendorToday,
   compareTimes,
   normalizeDateToUtcMidnight,
+  getTimezoneDisplay,
 } from '../utils/timezoneHelper.js';
 import { AppError } from '../utils/errors.js';
 import { seedDatabase } from '../../prisma/seed.js';
@@ -467,6 +468,7 @@ class SubscriptionService {
       planSummary: vendor.planSummary,
       planName: vendor.planName,
       timezone: vendor.timezone,
+      timezoneDisplay: getTimezoneDisplay(vendor.timezone),
       isPaused: vendor.isPaused,
       availableSlots: vendor.slotConfigs.map((slot) => ({
         id: slot.id,

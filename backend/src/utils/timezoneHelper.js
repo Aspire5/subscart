@@ -111,3 +111,36 @@ export function isSlotCutoffPassed(cutoffTime, timezone, referenceDate = new Dat
   return compareTimes(timeString, cutoffTime) >= 0;
 }
 
+const TIMEZONE_ABBR_MAP = {
+  'Asia/Kolkata': 'IST',
+  'Asia/Calcutta': 'IST',
+  'Asia/Dubai': 'GST',
+  'America/New_York': 'EST',
+  'America/Los_Angeles': 'PST',
+  'America/Chicago': 'CST',
+  'Europe/London': 'GMT',
+  'UTC': 'UTC',
+};
+
+/**
+ * Returns a human-friendly timezone display string like "All times in IST (UTC+5:30)".
+ * Dynamically computes the UTC offset and timezone abbreviation for any IANA timezone.
+ * @param {string} timezone
+ * @returns {string}
+ */
+export function getTimezoneDisplay(timezone = 'Asia/Kolkata') {
+  try {
+    const offsetFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset',
+    });
+    const parts = offsetFormatter.formatToParts(new Date());
+    const offsetPart = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+    const utcOffset = offsetPart.replace('GMT', 'UTC');
+    const abbr = TIMEZONE_ABBR_MAP[timezone] || parts.find((p) => p.type === 'timeZoneName')?.value || timezone;
+    return `All times in ${abbr} (${utcOffset})`;
+  } catch {
+    return `All times in ${timezone}`;
+  }
+}
+

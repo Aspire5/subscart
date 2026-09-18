@@ -87,6 +87,7 @@ class ScheduleView extends GetView<ScheduleController> {
                             isPaused: subscription.isPaused,
                             onPauseToggle: controller.togglePauseSubscription,
                             onAddSlots: controller.onAddSlotsTapped,
+                            timezoneLabel: subscription.timezoneDisplay,
                           ),
                           const SizedBox(height: 14),
 

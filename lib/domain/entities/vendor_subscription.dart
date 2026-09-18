@@ -6,6 +6,8 @@ class VendorSubscription {
   final String vendorLogoUrl;
   final String planSummary;
   final String planName;
+  final String timezone;
+  final String timezoneDisplay;
   final bool isPaused;
   final List<DailySchedule> schedules;
 
@@ -15,6 +17,8 @@ class VendorSubscription {
     required this.vendorLogoUrl,
     required this.planSummary,
     required this.planName,
+    this.timezone = 'Asia/Kolkata',
+    this.timezoneDisplay = 'All times in IST (UTC+5:30)',
     required this.isPaused,
     required this.schedules,
   });
@@ -25,6 +29,8 @@ class VendorSubscription {
     String? vendorLogoUrl,
     String? planSummary,
     String? planName,
+    String? timezone,
+    String? timezoneDisplay,
     bool? isPaused,
     List<DailySchedule>? schedules,
   }) {
@@ -34,6 +40,8 @@ class VendorSubscription {
       vendorLogoUrl: vendorLogoUrl ?? this.vendorLogoUrl,
       planSummary: planSummary ?? this.planSummary,
       planName: planName ?? this.planName,
+      timezone: timezone ?? this.timezone,
+      timezoneDisplay: timezoneDisplay ?? this.timezoneDisplay,
       isPaused: isPaused ?? this.isPaused,
       schedules: schedules ?? this.schedules,
     );

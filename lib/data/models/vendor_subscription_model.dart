@@ -7,6 +7,8 @@ class VendorSubscriptionModel {
   final String vendorLogoUrl;
   final String planSummary;
   final String planName;
+  final String timezone;
+  final String timezoneDisplay;
   final bool isPaused;
   final List<DailyScheduleModel> schedules;
 
@@ -16,6 +18,8 @@ class VendorSubscriptionModel {
     required this.vendorLogoUrl,
     required this.planSummary,
     required this.planName,
+    this.timezone = 'Asia/Kolkata',
+    this.timezoneDisplay = 'All times in IST (UTC+5:30)',
     required this.isPaused,
     required this.schedules,
   });
@@ -27,6 +31,8 @@ class VendorSubscriptionModel {
       vendorLogoUrl: json['vendorLogoUrl'] as String,
       planSummary: json['planSummary'] as String,
       planName: json['planName'] as String,
+      timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
+      timezoneDisplay: json['timezoneDisplay'] as String? ?? 'All times in IST (UTC+5:30)',
       isPaused: json['isPaused'] as bool? ?? false,
       schedules: (json['schedules'] as List<dynamic>)
           .map((e) => DailyScheduleModel.fromJson(e as Map<String, dynamic>))
@@ -41,6 +47,8 @@ class VendorSubscriptionModel {
       'vendorLogoUrl': vendorLogoUrl,
       'planSummary': planSummary,
       'planName': planName,
+      'timezone': timezone,
+      'timezoneDisplay': timezoneDisplay,
       'isPaused': isPaused,
       'schedules': schedules.map((e) => e.toJson()).toList(),
     };
@@ -53,6 +61,8 @@ class VendorSubscriptionModel {
       vendorLogoUrl: vendorLogoUrl,
       planSummary: planSummary,
       planName: planName,
+      timezone: timezone,
+      timezoneDisplay: timezoneDisplay,
       isPaused: isPaused,
       schedules: schedules.map((e) => e.toEntity()).toList(),
     );

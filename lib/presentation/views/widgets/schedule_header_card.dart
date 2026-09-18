@@ -11,6 +11,7 @@ class ScheduleHeaderCard extends StatelessWidget {
   final bool isPaused;
   final VoidCallback onPauseToggle;
   final VoidCallback onAddSlots;
+  final String? timezoneLabel;
 
   const ScheduleHeaderCard({
     super.key,
@@ -20,6 +21,7 @@ class ScheduleHeaderCard extends StatelessWidget {
     required this.isPaused,
     required this.onPauseToggle,
     required this.onAddSlots,
+    this.timezoneLabel,
   });
 
   @override
@@ -41,10 +43,35 @@ class ScheduleHeaderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section Heading
-          const Text(
-            'Schedule',
-            style: AppTextStyles.sectionTitle,
+          // Section Heading Row with Vendor Timezone
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text(
+                'Schedule',
+                style: AppTextStyles.sectionTitle,
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.schedule_rounded,
+                    size: 13,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    timezoneLabel ?? 'All times in IST (UTC+5:30)',
+                    style: AppTextStyles.bodyNotice.copyWith(
+                      fontSize: 11.5,
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 14),
 
