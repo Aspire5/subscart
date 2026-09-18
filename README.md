@@ -1,12 +1,14 @@
 # Subscart - Meal Plan & Subscription Management (Full-Stack Monorepo)
 
-> 📺 **Video Walkthrough**: [**Watch the Full Video Walkthrough on Google Drive**](https://drive.google.com/file/d/10WIAfA099wkx-dpOfy6zU5ktrkroMs4n/view?usp=sharing)
+> 📺 **Video Walkthrough**: [**Watch the Full Video Walkthrough on Google Drive**](https://drive.google.com/file/d/1yKs3kWtQBtIaD1tbgPtYpKskRYX0V-Tx/view?usp=sharing)
 
-Subscart is an enterprise-grade full-stack meal subscription management platform designed for real-world recurring delivery services. It handles dynamic delivery slots, strict kitchen cut-off deadlines, cross-date rescheduling, pairwise swaps, multi-item batch movements, and ghost-order elimination.
+Subscart is a full-stack meal subscription management platform designed for real-world recurring delivery services. It handles dynamic delivery slots, strict kitchen cut-off deadlines, cross-date rescheduling, pairwise swaps, multi-item batch movements, and ghost-order elimination.
 
 - **Frontend**: Flutter application architected with **Uncle Bob’s Clean Architecture** (Domain, Data, Presentation) and **GetX** reactive state management.
 - **Backend**: **Node.js (Express) + PostgreSQL + Prisma ORM** in a modular Layered Architecture (Routes → Controllers → Services → Data Access).
 - **Database**: PostgreSQL with dynamic vendor delivery window configurations and atomic ACID transactions.
+- **Deployed**: Backend Live and deployed on AWS (t3.micro) | Base URL - 'http://15.207.19.237:3000/api'
+
 
 ---
 
