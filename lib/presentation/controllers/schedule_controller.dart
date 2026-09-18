@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/theme/app_colors.dart';
@@ -67,7 +68,8 @@ class ScheduleController extends GetxController {
       selectedItemOrderMap.containsKey(itemId);
 
   void toggleItemSelection(MealItem item, MealOrder order) {
-    if (isMutating.value) return; // Block selection during active mutations
+    // Block selection during active mutations or if order is past cutoff
+    if (isMutating.value || order.isPastCutoff) return;
 
     if (selectedItemOrderMap.containsKey(item.id)) {
       selectedItemOrderMap.remove(item.id);
@@ -90,6 +92,7 @@ class ScheduleController extends GetxController {
 
   /// Generic blocking guard that executes an async action while showing the custom overlay
   /// and automatically drops any duplicate incoming calls.
+  /// Enforces a minimum display duration (~450ms) to eliminate visual flicker on ultra-fast APIs.
   Future<T?> runWithBlockingLoading<T>(
     Future<T> Function() action, {
     required String message,
@@ -98,9 +101,14 @@ class ScheduleController extends GetxController {
 
     isMutating.value = true;
     loadingMessage.value = message;
+    final stopwatch = Stopwatch()..start();
     try {
       return await action();
     } finally {
+      final elapsed = stopwatch.elapsed;
+      if (elapsed < const Duration(milliseconds: 450)) {
+        await Future.delayed(const Duration(milliseconds: 450) - elapsed);
+      }
       isMutating.value = false;
       loadingMessage.value = '';
     }
@@ -116,6 +124,8 @@ class ScheduleController extends GetxController {
         selectedDate.value = data.schedules.first.date;
       }
       clearSelection();
+    } catch (e) {
+      _showErrorSnackBar(_extractErrorMessage(e, 'Failed to load subscription'));
     } finally {
       isLoading.value = false;
     }
@@ -151,7 +161,7 @@ class ScheduleController extends GetxController {
               '$count ${count == 1 ? "meal item" : "meal items"} skipped from today\'s schedule.',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to skip selected items');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to skip selected items'));
       }
     }, message: 'Skipping $count ${count == 1 ? "meal" : "meals"}...');
   }
@@ -231,7 +241,7 @@ class ScheduleController extends GetxController {
               : 'Successfully swapped $count meals across scheduled dates.',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to swap meals');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to swap meals'));
       }
     }, message: 'Swapping $count ${count == 1 ? "meal" : "meals"}...');
   }
@@ -297,7 +307,7 @@ class ScheduleController extends GetxController {
               'Moved $count ${count == 1 ? "item" : "items"} to ${DateFormatter.formatShortDay(targetDate)} ${targetDate.day} (Order $targetOrderNumber).',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to move selected items');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to move selected items'));
       }
     }, message: 'Moving $count ${count == 1 ? "item" : "items"}...');
   }
@@ -358,7 +368,7 @@ class ScheduleController extends GetxController {
               'Order ${order.orderNumber} moved to ${DateFormatter.formatShortDay(targetDate)} ${targetDate.day} ($newTimeSlot).',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to reschedule delivery');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to reschedule delivery'));
       }
     }, message: 'Rescheduling Order ${order.orderNumber}...');
   }
@@ -380,7 +390,7 @@ class ScheduleController extends GetxController {
               'Order ${order.orderNumber} delivery slot is now ${isActive ? "active" : "inactive"}.',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to toggle delivery slot');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to toggle delivery slot'));
       }
     }, message: '${isActive ? "Activating" : "Deactivating"} slot...');
   }
@@ -401,7 +411,7 @@ class ScheduleController extends GetxController {
               : 'Your meal plan is now active.',
         );
       } catch (e) {
-        _showErrorSnackBar('Failed to update subscription status');
+        _showErrorSnackBar(_extractErrorMessage(e, 'Failed to update subscription status'));
       }
     }, message: '${newState ? "Pausing" : "Resuming"} subscription...');
   }
@@ -411,6 +421,29 @@ class ScheduleController extends GetxController {
       title: 'Add Extra Slots',
       message: 'Extra slots can be added for upcoming days from next cycle.',
     );
+  }
+
+  String _extractErrorMessage(dynamic error, String fallback) {
+    if (error is DioException) {
+      final responseData = error.response?.data;
+      if (responseData is Map && responseData['message'] != null) {
+        final message = responseData['message'].toString().trim();
+        if (message.isNotEmpty) return message;
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return 'Network timeout. Please check your internet connection.';
+      }
+      if (error.type == DioExceptionType.connectionError) {
+        return 'Unable to connect to server. Please try again.';
+      }
+    } else if (error is Exception) {
+      final str = error.toString().replaceFirst('Exception: ', '').trim();
+      if (str.isNotEmpty && !str.startsWith('Instance of')) {
+        return str;
+      }
+    }
+    return fallback;
   }
 
   void _showFeedbackSnackBar({required String title, required String message}) {

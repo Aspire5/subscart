@@ -102,23 +102,23 @@ class OrderCard extends StatelessWidget {
 
               // Re-schedule Button
               InkWell(
-                onTap: onReschedule,
+                onTap: order.isPastCutoff ? null : onReschedule,
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
+                      Icon(
+                        order.isPastCutoff ? Icons.lock_outline_rounded : Icons.calendar_today_outlined,
                         size: 15,
-                        color: AppColors.textPrimary,
+                        color: order.isPastCutoff ? AppColors.textMuted : AppColors.textPrimary,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         'Re-schedule',
                         style: AppTextStyles.actionButton.copyWith(
-                          color: AppColors.textPrimary,
+                          color: order.isPastCutoff ? AppColors.textMuted : AppColors.textPrimary,
                         ),
                       ),
                     ],
@@ -229,7 +229,7 @@ class OrderCard extends StatelessWidget {
           const SizedBox(height: 2),
 
           // Cut-off Notice
-          if (order.isPastCutoff)
+          if (order.isPastCutoff) ...[
             Row(
               children: [
                 const Icon(
@@ -248,8 +248,16 @@ class OrderCard extends StatelessWidget {
                   ),
                 ),
               ],
-            )
-          else
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Skip, swap, and move actions are closed for this order.',
+              style: AppTextStyles.bodyNotice.copyWith(
+                color: AppColors.textMuted,
+                fontSize: 12,
+              ),
+            ),
+          ] else
             RichText(
               text: TextSpan(
                 text: 'Edits allowed until ',
@@ -288,6 +296,7 @@ class OrderCard extends StatelessWidget {
                 return MealItemTile(
                   item: item,
                   isSelected: isItemSelected(item.id),
+                  isSelectable: !order.isPastCutoff,
                   onToggleSelect: () => onToggleItemSelect(item, order),
                 );
               },

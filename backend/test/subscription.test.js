@@ -64,10 +64,13 @@ test('Slot availability checks future dates correctly', async () => {
 
 test('Reschedule moves order across dates and updates cutoff notice', async () => {
   const sub = await subscriptionService.getSubscription();
-  // Choose an order on a future date to avoid today's cutoff checks during test
-  const futureSchedule = sub.schedules[sub.schedules.length - 2];
-  const orderToMove = futureSchedule.orders[0];
-  const targetSchedule = sub.schedules[sub.schedules.length - 1];
+  // Find future schedules to avoid today's cutoff limits
+  const futureSchedules = sub.schedules.slice(1);
+  const scheduleWithOrders = futureSchedules.find((s) => s.orders && s.orders.length > 0);
+  assert.ok(scheduleWithOrders, 'Must find a future schedule with orders');
+  const orderToMove = scheduleWithOrders.orders[0];
+  const targetSchedule = futureSchedules.find((s) => s.date !== scheduleWithOrders.date);
+  assert.ok(targetSchedule, 'Must find a target future schedule');
 
   const updatedSub = await subscriptionService.rescheduleOrder({
     orderId: orderToMove.id,
@@ -84,3 +87,41 @@ test('Reschedule moves order across dates and updates cutoff notice', async () =
   assert.equal(foundOrder.timeWindow, '7:30 pm - 8:30 pm');
   assert.equal(foundOrder.cutoffNotice, 'Edits allowed until 6:00 PM the day of your Order.');
 });
+
+test('Modifying an order past its cutoff throws AppError with statusCode 400', async () => {
+  const sub = await subscriptionService.getSubscription();
+  const todaySchedule = sub.schedules[0];
+  const pastCutoffOrder = todaySchedule?.orders.find((o) => o.isPastCutoff && o.items.length > 0);
+  if (pastCutoffOrder) {
+    await assert.rejects(
+      async () => {
+        await subscriptionService.skipMealItems({
+          orderToItemIdsMap: { [pastCutoffOrder.id]: [pastCutoffOrder.items[0].id] },
+        });
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.ok(err.message.includes('Modifications closed'));
+        return true;
+      }
+    );
+  } else {
+    assert.throws(
+      () => {
+        subscriptionService._assertOrderEditable(
+          { timeWindow: '07:30 am - 08:30 am' },
+          '2026-09-18',
+          'Asia/Kolkata',
+          '2026-09-18',
+          '23:00'
+        );
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.ok(err.message.includes('Modifications closed'));
+        return true;
+      }
+    );
+  }
+});
+

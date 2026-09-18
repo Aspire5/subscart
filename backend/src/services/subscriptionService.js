@@ -5,6 +5,7 @@ import {
   compareTimes,
   normalizeDateToUtcMidnight,
 } from '../utils/timezoneHelper.js';
+import { AppError } from '../utils/errors.js';
 import { seedDatabase } from '../../prisma/seed.js';
 
 class SubscriptionService {
@@ -12,7 +13,7 @@ class SubscriptionService {
    * Asserts that an order is eligible for modifications:
    * 1. Not from a past date.
    * 2. If today, its delivery window cutoff time has not passed.
-   * Throws an error if cutoff has passed.
+   * Throws an AppError(..., 400) if cutoff has passed.
    */
   async _assertOrderEditable(orderId) {
     const order = await prisma.mealOrder.findUnique({
@@ -31,7 +32,7 @@ class SubscriptionService {
     });
 
     if (!order) {
-      throw new Error(`Order with ID ${orderId} not found`);
+      throw new AppError(`Order with ID ${orderId} not found`, 404);
     }
 
     const vendor = order.schedule.vendor;
@@ -40,7 +41,7 @@ class SubscriptionService {
     const relation = getDateRelationToVendorToday(scheduleDateStr, timezone);
 
     if (relation === 'past') {
-      throw new Error('Modifications closed: Cannot edit an order from a past date');
+      throw new AppError('Modifications closed: Cannot edit an order from a past date', 400);
     }
 
     if (relation === 'today') {
@@ -51,8 +52,9 @@ class SubscriptionService {
           s.name.toLowerCase() === order.timeWindow.toLowerCase()
       );
       if (matchedSlot && compareTimes(vendorNow.timeString, matchedSlot.cutoffTime) >= 0) {
-        throw new Error(
-          `Modifications closed: Cut-off time (${matchedSlot.cutoffTime}) has passed for this delivery window`
+        throw new AppError(
+          `Modifications closed: Cut-off time (${matchedSlot.cutoffTime}) has passed for this delivery window`,
+          400
         );
       }
     }
@@ -108,7 +110,7 @@ class SubscriptionService {
     });
 
     if (!vendor) {
-      throw new Error('Vendor not configured');
+      throw new AppError('Vendor not configured', 500);
     }
 
     const timezone = vendor.timezone || 'Asia/Kolkata';
@@ -175,7 +177,7 @@ class SubscriptionService {
    */
   async rescheduleOrder({ orderId, targetDate, targetSlot, targetSlotId }) {
     if (!orderId || !targetDate) {
-      throw new Error('orderId and targetDate are required');
+      throw new AppError('orderId and targetDate are required', 400);
     }
 
     // Assert source order is editable
@@ -190,7 +192,7 @@ class SubscriptionService {
     // Check slot availability for the target date
     const availability = await this.getSlotAvailability(targetDateStr);
     if (!availability.hasAvailableSlots) {
-      throw new Error(`No available delivery slots remaining on ${targetDateStr}`);
+      throw new AppError(`No available delivery slots remaining on ${targetDateStr}`, 400);
     }
 
     // Determine target slot config
@@ -219,7 +221,7 @@ class SubscriptionService {
     }
 
     if (!selectedSlotConfig) {
-      throw new Error('Unable to assign a valid delivery slot for the selected date');
+      throw new AppError('Unable to assign a valid delivery slot for the selected date', 400);
     }
 
     const newTimeWindow = selectedSlotConfig.displayTime;
@@ -303,7 +305,7 @@ class SubscriptionService {
    */
   async moveMealItems({ sourceOrderToItemIdsMap, targetDate, targetOrderId }) {
     if (!sourceOrderToItemIdsMap || !targetOrderId) {
-      throw new Error('sourceOrderToItemIdsMap and targetOrderId are required');
+      throw new AppError('sourceOrderToItemIdsMap and targetOrderId are required', 400);
     }
 
     // Verify source and target orders are editable
@@ -332,7 +334,7 @@ class SubscriptionService {
    */
   async swapMealItem({ sourceItemId, targetItemId }) {
     if (!sourceItemId || !targetItemId) {
-      throw new Error('sourceItemId and targetItemId are required');
+      throw new AppError('sourceItemId and targetItemId are required', 400);
     }
 
     const sourceItem = await prisma.mealItem.findUnique({
@@ -345,7 +347,7 @@ class SubscriptionService {
     });
 
     if (!sourceItem || !targetItem) {
-      throw new Error('One or both items to swap do not exist');
+      throw new AppError('One or both items to swap do not exist', 404);
     }
 
     await this._assertOrderEditable(sourceItem.orderId);
@@ -371,7 +373,7 @@ class SubscriptionService {
    */
   async skipMealItems({ orderToItemIdsMap }) {
     if (!orderToItemIdsMap) {
-      throw new Error('orderToItemIdsMap is required');
+      throw new AppError('orderToItemIdsMap is required', 400);
     }
 
     for (const orderId of Object.keys(orderToItemIdsMap)) {
@@ -395,7 +397,7 @@ class SubscriptionService {
    */
   async toggleDeliverySlot({ orderId, isActive }) {
     if (!orderId || typeof isActive !== 'boolean') {
-      throw new Error('orderId and isActive (boolean) are required');
+      throw new AppError('orderId and isActive (boolean) are required', 400);
     }
 
     await this._assertOrderEditable(orderId);
@@ -413,12 +415,12 @@ class SubscriptionService {
    */
   async pauseSubscription({ isPaused }) {
     if (typeof isPaused !== 'boolean') {
-      throw new Error('isPaused (boolean) is required');
+      throw new AppError('isPaused (boolean) is required', 400);
     }
 
     const vendor = await prisma.vendor.findFirst();
     if (!vendor) {
-      throw new Error('Vendor not found');
+      throw new AppError('Vendor not found', 404);
     }
 
     await prisma.vendor.update({

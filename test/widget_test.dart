@@ -3,6 +3,8 @@ import 'package:subscart/data/models/daily_schedule_model.dart';
 import 'package:subscart/data/models/meal_item_model.dart';
 import 'package:subscart/data/models/meal_order_model.dart';
 import 'package:subscart/data/models/vendor_subscription_model.dart';
+import 'package:subscart/domain/entities/meal_item.dart';
+import 'package:subscart/domain/entities/meal_order.dart';
 import 'package:subscart/domain/entities/vendor_subscription.dart';
 import 'package:subscart/domain/repositories/subscription_repository.dart';
 import 'package:subscart/domain/usecases/get_subscription_schedule_usecase.dart';
@@ -772,6 +774,76 @@ void main() {
       await Future.wait([f1, f2]);
       expect(executions, 1,
           reason: 'Second action must be dropped by mutex lock');
+      expect(controller.isMutating.value, isFalse);
+    });
+
+    test('ScheduleController rejects selecting items from past cutoff orders',
+        () async {
+      final controller = ScheduleController(
+        getSubscriptionUseCase: getSubscriptionUseCase,
+        skipMealItemUseCase: skipMealItemUseCase,
+        skipMealItemsBatchUseCase: skipMealItemsBatchUseCase,
+        swapMealItemUseCase: swapMealItemUseCase,
+        moveOrderItemsUseCase: moveOrderItemsUseCase,
+        moveMealItemsBatchUseCase: moveMealItemsBatchUseCase,
+        rescheduleOrderUseCase: rescheduleOrderUseCase,
+        toggleDeliverySlotUseCase: toggleDeliverySlotUseCase,
+        pauseSubscriptionUseCase: pauseSubscriptionUseCase,
+      );
+      await controller.loadSubscriptionData();
+
+      const item = MealItem(
+        id: 'item_past_1',
+        name: 'Test Item',
+        calories: 350,
+        fatGrams: 10,
+        proteinGrams: 20,
+        carbGrams: 40,
+        imageUrl: '',
+      );
+
+      const pastOrder = MealOrder(
+        id: 'ord_past_1',
+        orderNumber: 1,
+        orderType: 'Lunch',
+        location: 'Home',
+        timeWindow: '12:00 PM',
+        isSlotActive: true,
+        cutoffNotice: 'Cut-off passed',
+        isPastCutoff: true,
+        previewImageUrl: '',
+        items: [item],
+      );
+
+      controller.toggleItemSelection(item, pastOrder);
+      expect(controller.isItemSelected('item_past_1'), isFalse,
+          reason: 'Item selection must be ignored when order is past cutoff');
+      expect(controller.selectedCount, 0);
+    });
+
+    test('ScheduleController runWithBlockingLoading enforces minimum perceptual duration',
+        () async {
+      final controller = ScheduleController(
+        getSubscriptionUseCase: getSubscriptionUseCase,
+        skipMealItemUseCase: skipMealItemUseCase,
+        skipMealItemsBatchUseCase: skipMealItemsBatchUseCase,
+        swapMealItemUseCase: swapMealItemUseCase,
+        moveOrderItemsUseCase: moveOrderItemsUseCase,
+        moveMealItemsBatchUseCase: moveMealItemsBatchUseCase,
+        rescheduleOrderUseCase: rescheduleOrderUseCase,
+        toggleDeliverySlotUseCase: toggleDeliverySlotUseCase,
+        pauseSubscriptionUseCase: pauseSubscriptionUseCase,
+      );
+
+      final stopwatch = Stopwatch()..start();
+      await controller.runWithBlockingLoading(() async {
+        // Fast 5ms action
+        await Future.delayed(const Duration(milliseconds: 5));
+      }, message: 'Fast action');
+      stopwatch.stop();
+
+      // Should take at least 400ms to eliminate visual blink
+      expect(stopwatch.elapsedMilliseconds >= 400, isTrue);
       expect(controller.isMutating.value, isFalse);
     });
   });
