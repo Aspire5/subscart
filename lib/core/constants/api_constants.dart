@@ -16,8 +16,8 @@ class ApiConstants {
   /// Examples:
   ///   'https://subscart-backend.up.railway.app/api'
   ///   'https://api.yourdomain.com/api'
-  ///   'http://192.168.1.15:3000/api' (Physical device testing on local Wi-Fi)
-  static const String? productionBaseUrl = null;
+  ///   'http://15.207.19.237:3000/api' (AWS EC2 deployment)
+  static const String productionBaseUrl = 'http://15.207.19.237:3000/api';
 
   /// Android Emulator requires '10.0.2.2' to access host machine's localhost.
   static const String localAndroidBaseUrl = 'http://10.0.2.2:3000/api';
@@ -27,8 +27,8 @@ class ApiConstants {
 
   /// Resolves the active Base URL automatically based on runtime platform.
   static String get baseUrl {
-    if (productionBaseUrl != null && productionBaseUrl!.trim().isNotEmpty) {
-      return productionBaseUrl!.trim();
+    if (productionBaseUrl.trim().isNotEmpty) {
+      return productionBaseUrl.trim();
     }
     if (!kIsWeb && Platform.isAndroid) {
       return localAndroidBaseUrl;

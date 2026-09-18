@@ -58,10 +58,10 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Subscart server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Subscription API: http://localhost:${PORT}/api/subscription`);
+  console.log(`Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`Subscription API: http://0.0.0.0:${PORT}/api/subscription`);
 });
 
 export default app;
