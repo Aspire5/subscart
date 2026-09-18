@@ -1,14 +1,15 @@
 import 'package:dio/dio.dart';
+import '../constants/api_constants.dart';
 
 class DioClient {
   late final Dio dio;
 
-  DioClient({String baseUrl = 'https://api.subscart.com/v1'}) {
+  DioClient({String? baseUrl}) {
     dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
+        baseUrl: baseUrl ?? ApiConstants.baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

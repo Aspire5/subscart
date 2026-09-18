@@ -1,156 +1,170 @@
-# Subscart - Meal Plan & Subscription Management App
+# Subscart - Meal Plan & Subscription Management (Full-Stack Monorepo)
 
 > 📺 **Video Walkthrough**: [**Watch the Full Video Walkthrough on Google Drive**](https://drive.google.com/file/d/10WIAfA099wkx-dpOfy6zU5ktrkroMs4n/view?usp=sharing)
 
-A modern, offline-first Flutter application built with **Clean Architecture** and **GetX** for managing recurring meal subscriptions, daily order schedules, cross-date batch meal swaps, order moves, delivery rescheduling, and automated cut-off notices.
+A full-stack meal subscription management platform built with:
+- **Frontend**: Flutter application following **Uncle Bob's Clean Architecture** and **GetX** state management.
+- **Backend**: **Node.js (Express) + PostgreSQL + Prisma ORM** in a modular Layered Architecture (Routes → Controllers → Services → Data Access).
 
 ---
 
-## 📱 Application Overview
-
-**Subscart** empowers meal subscription subscribers to take complete control of their recurring delivery schedules. Subscribers can seamlessly customize their daily meals, pause subscriptions, swap meals across different dates with step-by-step conflict prevention, move items to other slots/days, and reschedule delivery windows.
-
----
-
-## ✨ Key Features
-
-### 1. 📅 Interactive Day Schedule Carousel
-- Horizontally scrollable day picker displaying short day labels and dates.
-- Instant reactive schedule switching without page reloads.
-- Safe state isolation: switching dates automatically resets active item selections.
-
-### 2. ⚡ Floating Batch Action Bar & Multi-Select
-- Select one or multiple meal items across different orders on any day.
-- A non-blocking, elevated floating action bar dynamically appears with action shortcuts:
-  - **Batch Skip**: Skip multiple selected items in one action.
-  - **Batch Swap**: Launch a guided swap wizard for all selected items.
-  - **Batch Move**: Relocate selected items to a target date and order slot.
-  - **Clear**: Instantly deselect all active items.
-- Compact badge and responsive flex design optimized for narrow (320dp–480dp) screens.
-
-### 3. 🔄 Multi-Item Step-by-Step Swap Wizard
-- **Guided Step-by-Step Pairing**: For multi-selected meals, guides the user step-by-step (`Step X of N: Pair "[Meal Name]"`).
-- **Collision & Conflict Prevention**: Target meals chosen in earlier steps are automatically disabled (`Paired`) in later steps.
-- **Auto Date-Sync**: Navigating back via "Previous Item" auto-syncs the date carousel to the target date previously chosen for that item.
-- **Review & Change Summary**: Displays a clean before-and-after comparison (`Source Item ⇄ Target Item`) with individual "Change" buttons before final batch execution.
-
-### 4. 📦 Batch Move to Target Days & Slots
-- Move selected meals from today's orders into any available upcoming day and specific order slot (`Order 1`, `Order 2`, or `Order 3`).
-- Automatic clean empty states if an order has all its items moved or skipped.
-
-### 5. ⏰ Delivery Rescheduling & Cut-off Notices
-- Reschedule time windows (`Breakfast`, `Lunch`, `Evening`, `Dinner`).
-- Dynamic cut-off notices indicating the exact deadline before which edits are permitted.
-
-### 6. ⏸️ Subscription Pause & Delivery Slot Toggles
-- Individual Cupertino toggle switches for each delivery slot.
-- Master Pause/Resume switch for the entire subscription plan.
-
-### 7. 💾 Offline-First Persistent State
-- Powered by `LocalStorageService` with local storage fallback (`GetStorage` / `SharedPreferences`).
-- Changes made in the app (skips, moves, swaps, toggles, reschedules) persist across app restarts.
-
----
-
-## 🏗️ Architecture & Technology Stack
-
-The codebase follows **Uncle Bob's Clean Architecture** principles with a strict separation of concerns into three layers:
+## 🏗️ Repository Monorepo Structure
 
 ```
-lib/
-├── core/
-│   ├── network/          # Dio HTTP client & ApiResult abstractions
-│   ├── storage/          # LocalStorageService for persistence
-│   ├── theme/            # AppColors, AppTheme, AppTextStyles
-│   └── utils/            # DateFormatter helpers
-├── data/
-│   ├── datasources/      # MockSeedData, SubscriptionLocalDataSource
-│   ├── models/           # Data models with JSON serialization
-│   └── repositories/     # SubscriptionRepositoryImpl implementation
-├── domain/
-│   ├── entities/         # Immutable business entities
-│   ├── repositories/     # Abstract repository contracts
-│   └── usecases/         # Single-responsibility use cases
-└── presentation/
-    ├── bindings/         # GetX Dependency Injection bindings
-    ├── controllers/      # ScheduleController (Reactive Rx State)
-    ├── routes/           # AppPages & AppRoutes
-    └── views/            # ScheduleView and modular UI widgets
+subscart/
+├── backend/                      # Live Node.js + PostgreSQL Backend
+│   ├── .env                      # Committed deliberately for evaluator convenience
+│   ├── package.json              # ES Modules ("type": "module")
+│   ├── prisma/
+│   │   ├── schema.prisma         # Relational schema (Vendor, DeliverySlotConfig, etc.)
+│   │   └── seed.js               # Database seeder matching initial meal plans
+│   ├── src/
+│   │   ├── config/prisma.js      # PrismaClient connection pool singleton
+│   │   ├── controllers/          # HTTP transport layer & validation
+│   │   ├── routes/               # REST endpoint routes
+│   │   ├── services/             # Core business logic & Prisma transactions
+│   │   ├── utils/timezoneHelper.js # Vendor timezone conversions & cutoff comparison
+│   │   ├── middlewares/          # Centralized error handling
+│   │   └── server.js             # Express app entrypoint & health check
+│   └── test/                     # Native Node.js test suite (node --test)
+├── lib/                          # Flutter Client (Clean Architecture)
+│   ├── core/constants/           # ApiConstants (Base URLs & endpoint routes)
+│   ├── core/network/             # DioClient with smart host resolution
+│   ├── data/datasources/         # SubscriptionRemoteDataSource (Live API)
+│   ├── data/repositories/        # SubscriptionRepositoryImpl (Network-first + Cache)
+│   ├── domain/                   # Entities, Contracts & Use Cases
+│   └── presentation/             # GetX controllers, views & reusable loaders
+├── test/                         # Unit tests and test doubles (fixtures)
+└── README.md
 ```
 
-### Tech Stack:
-- **Framework**: [Flutter](https://flutter.dev) (Dart SDK `^3.9.2`)
-- **State Management & DI**: [GetX](https://pub.dev/packages/get)
-- **Local Persistence**: [GetStorage](https://pub.dev/packages/get_storage)
-- **HTTP Client Scaffolding**: [Dio](https://pub.dev/packages/dio)
-- **Image Caching**: [cached_network_image](https://pub.dev/packages/cached_network_image)
-- **Date Formatting**: [intl](https://pub.dev/packages/intl)
+---
+
+## ⏰ Delivery Rescheduling & Timezone Architecture
+
+Based on production requirements for meal delivery services:
+
+### 1. Cross-Date Rescheduling
+- Rescheduling moves the **entire delivery order** (including all paired meal items) from its current date to a **different target date** within the active subscription schedule.
+- When an order is relocated, source and target day orders are automatically renumbered (1, 2, 3...).
+
+### 2. Vendor Operational Timezone
+- The vendor model has an explicit operational `timezone` (e.g., `Asia/Kolkata` or `America/New_York`).
+- Regardless of the user device's local clock, all delivery cut-offs and "today" calendar checks are evaluated against the **vendor's dispatch hub timezone**.
+
+### 3. Dynamic Database Delivery Slots (`DeliverySlotConfig`)
+- Delivery windows and cut-off deadlines are **not hardcoded in code**.
+- Stored in the `DeliverySlotConfig` table in PostgreSQL:
+  - **Breakfast Window**: `8:00 am - 9:00 am` (Cut-off: 7:00 AM)
+  - **Lunch Window**: `12:30 pm - 1:30 pm` (Cut-off: 11:00 AM)
+  - **Evening Window**: `4:00 pm - 5:00 pm` (Cut-off: 3:00 PM)
+  - **Dinner Window**: `7:30 pm - 8:30 pm` (Cut-off: 6:00 PM)
+- Slots can be added, modified, or deactivated directly in the database without touching code.
+
+### 4. Same-Day Cut-Off & Auto-Slot Assignment
+- If a customer reschedules an order to **today**:
+  - The system checks each slot's cut-off time against current vendor time.
+  - Passed slots are marked unavailable and cannot be selected.
+  - The system **automatically assigns the next available slot** (e.g., if Lunch cutoff has passed, Evening is auto-assigned).
+  - If all cutoffs for today have passed, rescheduling to today is blocked with a clear notice directing the user to select tomorrow or later.
+- For future dates, all active slots remain open.
 
 ---
 
-## 🤖 Use of AI Disclosure
+## ⚡ Backend Setup & Run Instructions
 
-I am willingly and proactively disclosing the use of AI in the development of this project:
-- **Code Development & Logic**: Developed with the **AntiGravity model (Gemini 3.7 Flash)** for Clean Architecture modeling, GetX state management, batch usecase implementations, widget tree optimizations, and unit test suites.
-- **Frontend & UI Aesthetics**: User interface layout concepts, typography, spacing tokens, and design specifications were crafted using **Google Stitch**.
+> [!NOTE]
+> **Environment Variables**: The `backend/.env` file is intentionally included in the repository so reviewers can clone and immediately run the backend without manual configuration.
 
----
+### 1. Prerequisites
+- **Node.js** `>= 18` (v20+ recommended)
+- **PostgreSQL** running locally on port `5432` (or a cloud PostgreSQL URL in `.env`)
 
-## 🚀 Getting Started
-
-### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (version `>=3.24.0` or latest stable)
-- [Dart SDK](https://dart.dev/get-dart) (version `>=3.9.0`)
-- Android Studio / Xcode / VS Code with Flutter extension
-- An active Android/iOS emulator or connected physical device
-
-### Installation & Run
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Aspire5/subscart.git
-   cd subscart
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   flutter pub get
-   ```
-
-3. **Run Static Code Analysis**:
-   ```bash
-   flutter analyze
-   ```
-
-4. **Run Unit & Widget Tests**:
-   ```bash
-   flutter test
-   ```
-
-5. **Launch the Application**:
-   ```bash
-   flutter run
-   ```
-
----
-
-## 🧪 Testing
-
-The test suite covers core business logic, multi-item batch operations, and controller reactive states:
-- Initial subscription and schedule loading.
-- Single and batch meal skipping across orders on the same day.
-- Cross-date meal swapping with target slot updates.
-- Single and batch moving of meals to different dates and order slots.
-- Delivery slot active state toggling and cut-off notice calculations.
-- Master subscription pause/resume status toggling.
-- `ScheduleController` multi-selection state management and auto-clearing on date changes.
-
-Run all tests via:
+### 2. Setup Database & Start Server
 ```bash
-flutter test
+# 1. Navigate to backend directory
+cd backend
+
+# 2. Install dependencies
+npm install
+
+# 3. Create the database (if not already created)
+createdb subscart
+
+# 4. Push Prisma schema to PostgreSQL
+npx prisma db push
+
+# 5. Seed the database with initial menu and delivery slot configurations
+node prisma/seed.js
+
+# 6. Start the development server
+npm run dev
+# Or for production:
+npm start
 ```
+
+The server will start at `http://localhost:3000`.
+
+### 3. Run Backend Unit Tests
+```bash
+npm test
+```
+Tests verify timezone calculation, midnight boundaries, time comparisons, dynamic slot cutoff checks, and cross-date order movements.
+
+---
+
+## 🌐 API Reference
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Server health & PostgreSQL connection check |
+| `GET` | `/api/subscription` | Fetch complete subscription, vendor config & daily schedules |
+| `GET` | `/api/subscription/slots/availability?targetDate=YYYY-MM-DD` | Dynamic slot availability & next-available slot for target date |
+| `POST` | `/api/subscription/reschedule` | Reschedule order to a different date & slot |
+| `POST` | `/api/subscription/items/move` | Move meal items to another order / day |
+| `POST` | `/api/subscription/items/swap` | Atomic meal item swap between orders |
+| `POST` | `/api/subscription/items/skip` | Skip meal item(s) from order |
+| `POST` | `/api/subscription/slot/toggle` | Activate / deactivate delivery slot |
+| `POST` | `/api/subscription/pause` | Pause / resume master subscription |
+| `POST` | `/api/subscription/reset` | Restore database to default initial seed data |
+
+---
+
+## 📱 Flutter Application Setup
+
+### 1. Prerequisites
+- Flutter SDK `^3.24.0` (Dart `^3.9.0`)
+- Running backend server (`http://localhost:3000`)
+
+### 2. Run Flutter App
+```bash
+# Install dependencies
+flutter pub get
+
+# Run static analysis
+flutter analyze
+
+# Run unit & widget tests
+flutter test
+
+# Launch Flutter app (macOS / Web / Simulator)
+flutter run
+```
+
+### 3. API Base URL Configuration
+To configure or change the backend URL, open `lib/core/constants/api_constants.dart`:
+- Set `productionBaseUrl` to your deployed backend URL (e.g. Railway, AWS, Render).
+- By default, it automatically resolves `http://10.0.2.2:3000/api` for Android Emulator and `http://localhost:3000/api` for iOS Simulator / macOS / Web.
+
+---
+
+## 🧪 Automated Testing
+
+- **Backend**: Native Node.js test runner (`npm test`) testing timezone boundaries, slot availability, and atomic Prisma reschedule transactions.
+- **Frontend**: Flutter test suite (`flutter test`) verifying all use cases, Clean Architecture repository methods, cross-date reschedule flows, and reactive GetX state management.
 
 ---
 
 ## 📄 License
 This project is open-source and available under the [MIT License](LICENSE).
+

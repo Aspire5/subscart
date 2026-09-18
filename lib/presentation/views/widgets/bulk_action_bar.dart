@@ -8,6 +8,7 @@ class BulkActionBar extends StatelessWidget {
   final VoidCallback onSwap;
   final VoidCallback onMove;
   final VoidCallback onClear;
+  final bool isEnabled;
 
   const BulkActionBar({
     super.key,
@@ -16,6 +17,7 @@ class BulkActionBar extends StatelessWidget {
     required this.onSwap,
     required this.onMove,
     required this.onClear,
+    this.isEnabled = true,
   });
 
   @override
@@ -50,7 +52,7 @@ class BulkActionBar extends StatelessWidget {
               children: [
                 // Selection Info with Clear Button
                 InkWell(
-                  onTap: onClear,
+                  onTap: isEnabled ? onClear : null,
                   borderRadius: BorderRadius.circular(100),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -147,7 +149,7 @@ class BulkActionBar extends StatelessWidget {
     bool isPrimary = false,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: isEnabled ? onTap : null,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         height: 36,

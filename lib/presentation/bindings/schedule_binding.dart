@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/storage/local_storage_service.dart';
-import '../../data/datasources/subscription_local_datasource.dart';
+import '../../data/datasources/subscription_remote_datasource.dart';
 import '../../data/repositories/subscription_repository_impl.dart';
 import '../../domain/repositories/subscription_repository.dart';
 import '../../domain/usecases/get_subscription_schedule_usecase.dart';
@@ -17,13 +18,17 @@ import '../controllers/schedule_controller.dart';
 class ScheduleBinding extends Bindings {
   @override
   void dependencies() {
-    // Data Source
-    final storageService = Get.find<LocalStorageService>();
-    final localDataSource = SubscriptionLocalDataSourceImpl(storageService);
-    Get.lazyPut<SubscriptionLocalDataSource>(() => localDataSource);
+    // Network Client
+    Get.lazyPut<DioClient>(() => DioClient());
 
-    // Repository
-    final repository = SubscriptionRepositoryImpl(localDataSource);
+    // Remote Data Source
+    final remoteDataSource =
+        SubscriptionRemoteDataSourceImpl(Get.find<DioClient>());
+    Get.lazyPut<SubscriptionRemoteDataSource>(() => remoteDataSource);
+
+    // Repository (Backed by live remote backend API, optionally cached in local storage)
+    final storageService = Get.find<LocalStorageService>();
+    final repository = SubscriptionRepositoryImpl(remoteDataSource, storageService);
     Get.lazyPut<SubscriptionRepository>(() => repository);
 
     // Use Cases
@@ -49,7 +54,6 @@ class ScheduleBinding extends Bindings {
         rescheduleOrderUseCase: Get.find<RescheduleOrderUseCase>(),
         toggleDeliverySlotUseCase: Get.find<ToggleDeliverySlotUseCase>(),
         pauseSubscriptionUseCase: Get.find<PauseSubscriptionUseCase>(),
-        localDataSource: Get.find<SubscriptionLocalDataSource>(),
       ),
     );
   }

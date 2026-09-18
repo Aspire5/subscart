@@ -1,10 +1,11 @@
-import '../models/daily_schedule_model.dart';
-import '../models/meal_item_model.dart';
-import '../models/meal_order_model.dart';
-import '../models/vendor_subscription_model.dart';
+import 'package:subscart/data/models/daily_schedule_model.dart';
+import 'package:subscart/data/models/meal_item_model.dart';
+import 'package:subscart/data/models/meal_order_model.dart';
+import 'package:subscart/data/models/vendor_subscription_model.dart';
 
-class MockSeedData {
-  MockSeedData._();
+/// Test fixture data used exclusively for unit testing Clean Architecture usecases and controllers.
+class MockTestData {
+  MockTestData._();
 
   static const String defaultVendorLogo =
       'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=150&auto=format&fit=crop&q=80';
@@ -118,7 +119,7 @@ class MockSeedData {
           ];
           break;
 
-        case DateTime.tuesday: // Reference Mock Tuesday 15th
+        case DateTime.tuesday:
           orders = [
             MealOrderModel(
               id: 'ord_${dayNum}_1',
@@ -537,8 +538,8 @@ class MockSeedData {
   }
 
   static List<MealItemModel> alternateMealsPool() {
-    return [
-      const MealItemModel(
+    return const [
+      MealItemModel(
         id: 'pool_1',
         name: 'Avocado Greek Salad',
         calories: 310,
@@ -547,7 +548,7 @@ class MockSeedData {
         carbGrams: 22,
         imageUrl: saladImage,
       ),
-      const MealItemModel(
+      MealItemModel(
         id: 'pool_2',
         name: 'Wholewheat Pesto Pasta',
         calories: 450,
@@ -556,7 +557,7 @@ class MockSeedData {
         carbGrams: 58,
         imageUrl: pastaImage,
       ),
-      const MealItemModel(
+      MealItemModel(
         id: 'pool_3',
         name: 'Lean Teriyaki Chicken',
         calories: 395,
@@ -565,7 +566,7 @@ class MockSeedData {
         carbGrams: 40,
         imageUrl: bowlImage,
       ),
-      const MealItemModel(
+      MealItemModel(
         id: 'pool_4',
         name: 'BBQ Paneer Power Bowl',
         calories: 380,
@@ -574,7 +575,7 @@ class MockSeedData {
         carbGrams: 36,
         imageUrl: wrapImage,
       ),
-      const MealItemModel(
+      MealItemModel(
         id: 'pool_5',
         name: 'Herb Salmon Fillet',
         calories: 440,
@@ -583,7 +584,7 @@ class MockSeedData {
         carbGrams: 22,
         imageUrl: salmonImage,
       ),
-      const MealItemModel(
+      MealItemModel(
         id: 'pool_6',
         name: 'Protein Berry Pancake Stack',
         calories: 390,

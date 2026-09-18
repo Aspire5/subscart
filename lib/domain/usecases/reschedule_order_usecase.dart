@@ -10,11 +10,19 @@ class RescheduleOrderUseCase {
     required DateTime date,
     required String orderId,
     required String newTimeWindow,
+    DateTime? targetDate,
+    String? targetSlotId,
   }) {
     return _repository.rescheduleOrder(
       date: date,
       orderId: orderId,
       newTimeWindow: newTimeWindow,
+      targetDate: targetDate,
+      targetSlotId: targetSlotId,
     );
+  }
+
+  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) {
+    return _repository.getSlotAvailability(targetDate);
   }
 }

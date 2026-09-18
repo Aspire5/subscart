@@ -6,6 +6,7 @@ import '../../../core/utils/date_formatter.dart';
 import '../../../domain/entities/daily_schedule.dart';
 import '../../../domain/entities/meal_item.dart';
 import '../../../domain/entities/meal_order.dart';
+import 'app_loading_overlay.dart';
 
 class SelectedSwapSource {
   final MealItem item;
@@ -54,6 +55,7 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
   final Map<String, CompletedSwapPair> _pairedSwaps = {};
   bool _isReviewStep = false;
   late DateTime _selectedTargetDate;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -856,22 +858,34 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: () => widget.onAllSwapsConfirmed(pairs),
+                onPressed: _isSubmitting
+                    ? null
+                    : () {
+                        setState(() => _isSubmitting = true);
+                        widget.onAllSwapsConfirmed(pairs);
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryDark,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFE5E7EB),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                   elevation: 0,
                   minimumSize: const Size(0, 48),
                 ),
-                child: Text(
-                  pairs.length == 1
-                      ? 'Confirm Swap'
-                      : 'Confirm ${pairs.length} Swaps',
-                  style: AppTextStyles.actionButton,
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: AppCustomSpinner(size: 20, color: Colors.white),
+                      )
+                    : Text(
+                        pairs.length == 1
+                            ? 'Confirm Swap'
+                            : 'Confirm ${pairs.length} Swaps',
+                        style: AppTextStyles.actionButton,
+                      ),
               ),
             ),
           ],

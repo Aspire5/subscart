@@ -41,7 +41,11 @@ abstract class SubscriptionRepository {
     required DateTime date,
     required String orderId,
     required String newTimeWindow,
+    DateTime? targetDate,
+    String? targetSlotId,
   });
+
+  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate);
 
   Future<VendorSubscription> toggleDeliverySlot({
     required DateTime date,

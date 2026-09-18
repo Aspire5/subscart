@@ -1,11 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subscart/data/datasources/mock_seed_data.dart';
-import 'package:subscart/data/datasources/subscription_local_datasource.dart';
 import 'package:subscart/data/models/daily_schedule_model.dart';
 import 'package:subscart/data/models/meal_item_model.dart';
 import 'package:subscart/data/models/meal_order_model.dart';
 import 'package:subscart/data/models/vendor_subscription_model.dart';
-import 'package:subscart/data/repositories/subscription_repository_impl.dart';
+import 'package:subscart/domain/entities/vendor_subscription.dart';
+import 'package:subscart/domain/repositories/subscription_repository.dart';
 import 'package:subscart/domain/usecases/get_subscription_schedule_usecase.dart';
 import 'package:subscart/domain/usecases/move_meal_items_batch_usecase.dart';
 import 'package:subscart/domain/usecases/move_order_items_usecase.dart';
@@ -16,29 +15,47 @@ import 'package:subscart/domain/usecases/skip_meal_items_batch_usecase.dart';
 import 'package:subscart/domain/usecases/swap_meal_item_usecase.dart';
 import 'package:subscart/domain/usecases/toggle_delivery_slot_usecase.dart';
 import 'package:subscart/presentation/controllers/schedule_controller.dart';
+import 'fixtures/mock_test_data.dart';
 
-class InMemorySubscriptionLocalDataSource
-    implements SubscriptionLocalDataSource {
-  VendorSubscriptionModel _data = MockSeedData.initialSubscription();
-
-  @override
-  Future<VendorSubscriptionModel> getSubscription() async => _data;
+/// In-memory repository fake used for testing domain use cases and controller state.
+class FakeSubscriptionRepository implements SubscriptionRepository {
+  VendorSubscriptionModel _data = MockTestData.initialSubscription();
 
   @override
-  List<MealItemModel> getAlternateMealsPool() =>
-      MockSeedData.alternateMealsPool();
+  Future<VendorSubscription> getSubscription() async => _data.toEntity();
 
   @override
-  Future<VendorSubscriptionModel> skipMealItem(
-      DateTime date, String orderId, String itemId) async {
-    return await skipMealItems(date, {
+  Future<Map<String, dynamic>> getSlotAvailability(DateTime targetDate) async {
+    return {
+      'hasAvailableSlots': true,
+      'slots': [
+        {
+          'name': 'Breakfast Window',
+          'displayTime': '8:00 am - 9:00 am',
+          'cutoffTime': '07:00',
+          'cutoffNotice': 'Edits allowed until 7:00 AM the day of your Order.',
+          'isAvailable': true,
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<VendorSubscription> skipMealItem({
+    required DateTime date,
+    required String orderId,
+    required String itemId,
+  }) async {
+    return await skipMealItems(date: date, orderToItemIdsMap: {
       orderId: [itemId]
     });
   }
 
   @override
-  Future<VendorSubscriptionModel> skipMealItems(
-      DateTime date, Map<String, List<String>> orderToItemIdsMap) async {
+  Future<VendorSubscription> skipMealItems({
+    required DateTime date,
+    required Map<String, List<String>> orderToItemIdsMap,
+  }) async {
     final updatedSchedules = _data.schedules.map((schedule) {
       if (schedule.date.day == date.day) {
         final updatedOrders = schedule.orders.map((order) {
@@ -81,22 +98,22 @@ class InMemorySubscriptionLocalDataSource
       isPaused: _data.isPaused,
       schedules: updatedSchedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 
   @override
-  Future<VendorSubscriptionModel> swapMealItem(
-    DateTime sourceDate,
-    String sourceOrderId,
-    String sourceItemId,
-    DateTime targetDate,
-    String targetOrderId,
-    String targetItemId,
-  ) async {
+  Future<VendorSubscription> swapMealItem({
+    required DateTime sourceDate,
+    required String sourceOrderId,
+    required String sourceItemId,
+    required DateTime targetDate,
+    required String targetOrderId,
+    required String targetItemId,
+  }) async {
     MealItemModel? itemA;
     MealItemModel? itemB;
 
-    final poolItem = getAlternateMealsPool()
+    final poolItem = MockTestData.alternateMealsPool()
         .where((m) => m.id == targetItemId)
         .firstOrNull;
 
@@ -120,7 +137,7 @@ class InMemorySubscriptionLocalDataSource
     itemB ??= poolItem;
 
     if (itemA == null || itemB == null) {
-      return _data;
+      return _data.toEntity();
     }
 
     final replacementForA = itemB;
@@ -193,16 +210,16 @@ class InMemorySubscriptionLocalDataSource
       isPaused: _data.isPaused,
       schedules: updatedSchedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 
   @override
-  Future<VendorSubscriptionModel> moveOrderItems(
-    DateTime sourceDate,
-    String sourceOrderId,
-    DateTime targetDate,
-    String targetOrderId,
-  ) async {
+  Future<VendorSubscription> moveOrderItems({
+    required DateTime sourceDate,
+    required String sourceOrderId,
+    required DateTime targetDate,
+    required String targetOrderId,
+  }) async {
     List<String> allItemIds = [];
     for (final s in _data.schedules) {
       if (s.date.day == sourceDate.day) {
@@ -214,20 +231,20 @@ class InMemorySubscriptionLocalDataSource
       }
     }
     return await moveMealItems(
-      sourceDate,
-      {sourceOrderId: allItemIds},
-      targetDate,
-      targetOrderId,
+      sourceDate: sourceDate,
+      sourceOrderToItemIdsMap: {sourceOrderId: allItemIds},
+      targetDate: targetDate,
+      targetOrderId: targetOrderId,
     );
   }
 
   @override
-  Future<VendorSubscriptionModel> moveMealItems(
-    DateTime sourceDate,
-    Map<String, List<String>> sourceOrderToItemIdsMap,
-    DateTime targetDate,
-    String targetOrderId,
-  ) async {
+  Future<VendorSubscription> moveMealItems({
+    required DateTime sourceDate,
+    required Map<String, List<String>> sourceOrderToItemIdsMap,
+    required DateTime targetDate,
+    required String targetOrderId,
+  }) async {
     List<MealItemModel> itemsToMove = [];
     for (final s in _data.schedules) {
       if (s.date.day == sourceDate.day) {
@@ -300,12 +317,69 @@ class InMemorySubscriptionLocalDataSource
       isPaused: _data.isPaused,
       schedules: updatedSchedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 
   @override
-  Future<VendorSubscriptionModel> rescheduleOrder(
-      DateTime date, String orderId, String newTimeWindow) async {
+  Future<VendorSubscription> rescheduleOrder({
+    required DateTime date,
+    required String orderId,
+    required String newTimeWindow,
+    DateTime? targetDate,
+    String? targetSlotId,
+  }) async {
+    final effectiveTarget = targetDate ?? date;
+    if (effectiveTarget.day != date.day) {
+      MealOrderModel? orderToMove;
+      for (final s in _data.schedules) {
+        if (s.date.day == date.day) {
+          orderToMove = s.orders.where((o) => o.id == orderId).firstOrNull;
+        }
+      }
+      if (orderToMove != null) {
+        final updatedOrder = MealOrderModel(
+          id: orderToMove.id,
+          orderNumber: 1,
+          orderType: orderToMove.orderType,
+          location: orderToMove.location,
+          timeWindow: newTimeWindow,
+          isSlotActive: orderToMove.isSlotActive,
+          cutoffNotice: orderToMove.cutoffNotice,
+          items: orderToMove.items,
+          previewImageUrl: orderToMove.previewImageUrl,
+        );
+        final updatedSchedules = _data.schedules.map((schedule) {
+          if (schedule.date.day == date.day) {
+            return DailyScheduleModel(
+              date: schedule.date,
+              dayOfWeek: schedule.dayOfWeek,
+              dayNumber: schedule.dayNumber,
+              orders: schedule.orders.where((o) => o.id != orderId).toList(),
+            );
+          } else if (schedule.date.day == effectiveTarget.day) {
+            return DailyScheduleModel(
+              date: schedule.date,
+              dayOfWeek: schedule.dayOfWeek,
+              dayNumber: schedule.dayNumber,
+              orders: [...schedule.orders, updatedOrder],
+            );
+          }
+          return schedule;
+        }).toList();
+
+        _data = VendorSubscriptionModel(
+          vendorId: _data.vendorId,
+          vendorName: _data.vendorName,
+          vendorLogoUrl: _data.vendorLogoUrl,
+          planSummary: _data.planSummary,
+          planName: _data.planName,
+          isPaused: _data.isPaused,
+          schedules: updatedSchedules,
+        );
+        return _data.toEntity();
+      }
+    }
+
     final updatedSchedules = _data.schedules.map((schedule) {
       if (schedule.date.day == date.day) {
         final updatedOrders = schedule.orders.map((order) {
@@ -347,12 +421,15 @@ class InMemorySubscriptionLocalDataSource
       isPaused: _data.isPaused,
       schedules: updatedSchedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 
   @override
-  Future<VendorSubscriptionModel> toggleDeliverySlot(
-      DateTime date, String orderId, bool isActive) async {
+  Future<VendorSubscription> toggleDeliverySlot({
+    required DateTime date,
+    required String orderId,
+    required bool isActive,
+  }) async {
     final updatedSchedules = _data.schedules.map((schedule) {
       if (schedule.date.day == date.day) {
         final updatedOrders = schedule.orders.map((order) {
@@ -391,11 +468,13 @@ class InMemorySubscriptionLocalDataSource
       isPaused: _data.isPaused,
       schedules: updatedSchedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 
   @override
-  Future<VendorSubscriptionModel> pauseSubscription(bool isPaused) async {
+  Future<VendorSubscription> pauseSubscription({
+    required bool isPaused,
+  }) async {
     _data = VendorSubscriptionModel(
       vendorId: _data.vendorId,
       vendorName: _data.vendorName,
@@ -405,13 +484,13 @@ class InMemorySubscriptionLocalDataSource
       isPaused: isPaused,
       schedules: _data.schedules,
     );
-    return _data;
+    return _data.toEntity();
   }
 }
 
 void main() {
   group('Subscription Clean Architecture UseCase Tests', () {
-    late SubscriptionRepositoryImpl repository;
+    late FakeSubscriptionRepository repository;
     late GetSubscriptionScheduleUseCase getSubscriptionUseCase;
     late SkipMealItemUseCase skipMealItemUseCase;
     late SkipMealItemsBatchUseCase skipMealItemsBatchUseCase;
@@ -421,11 +500,9 @@ void main() {
     late RescheduleOrderUseCase rescheduleOrderUseCase;
     late ToggleDeliverySlotUseCase toggleDeliverySlotUseCase;
     late PauseSubscriptionUseCase pauseSubscriptionUseCase;
-    late InMemorySubscriptionLocalDataSource localDataSource;
 
     setUp(() {
-      localDataSource = InMemorySubscriptionLocalDataSource();
-      repository = SubscriptionRepositoryImpl(localDataSource);
+      repository = FakeSubscriptionRepository();
       getSubscriptionUseCase = GetSubscriptionScheduleUseCase(repository);
       skipMealItemUseCase = SkipMealItemUseCase(repository);
       skipMealItemsBatchUseCase = SkipMealItemsBatchUseCase(repository);
@@ -457,6 +534,27 @@ void main() {
       expect(order.timeWindow, '8:00 am - 9:00 am');
       expect(order.cutoffNotice,
           'Edits allowed until 7:00 AM the day of your Order.');
+    });
+
+    test('Reschedules entire order to a different target date', () async {
+      final sourceDate = DateTime(2026, 9, 15);
+      final targetDate = DateTime(2026, 9, 18);
+      final updated = await rescheduleOrderUseCase(
+        date: sourceDate,
+        orderId: 'ord_15_1',
+        newTimeWindow: '7:30 pm - 8:30 pm',
+        targetDate: targetDate,
+      );
+
+      final sourceSchedule =
+          updated.schedules.firstWhere((s) => s.dayNumber == 15);
+      expect(sourceSchedule.orders.any((o) => o.id == 'ord_15_1'), false);
+
+      final targetSchedule =
+          updated.schedules.firstWhere((s) => s.dayNumber == 18);
+      final movedOrder =
+          targetSchedule.orders.firstWhere((o) => o.id == 'ord_15_1');
+      expect(movedOrder.timeWindow, '7:30 pm - 8:30 pm');
     });
 
     test('Skips meal item from order with multiple items', () async {
@@ -496,8 +594,6 @@ void main() {
       final sourceDate = DateTime(2026, 9, 15);
       final targetDate = DateTime(2026, 9, 16);
 
-      // Tue 15th Order 1 has item_15_1_1 ('Grilled Chicken Burger')
-      // Wed 16th Order 1 has item_16_1_1 ('Oatmeal Chia Seed Parfait')
       final updated = await swapMealItemUseCase(
         sourceDate: sourceDate,
         sourceOrderId: 'ord_15_1',
@@ -517,11 +613,9 @@ void main() {
       final wedOrder =
           wedSchedule.orders.firstWhere((o) => o.id == 'ord_16_1');
 
-      // Now Tue Order 1 has the Oatmeal Chia Parfait
       expect(tueOrder.items.any((i) => i.name.contains('Oatmeal')), isTrue);
       expect(tueOrder.items.any((i) => i.name.contains('Burger')), isFalse);
 
-      // And Wed Order 1 has the Grilled Chicken Burger
       expect(wedOrder.items.any((i) => i.name.contains('Burger')), isTrue);
       expect(wedOrder.items.any((i) => i.name.contains('Oatmeal')), isFalse);
     });
@@ -600,7 +694,6 @@ void main() {
         rescheduleOrderUseCase: rescheduleOrderUseCase,
         toggleDeliverySlotUseCase: toggleDeliverySlotUseCase,
         pauseSubscriptionUseCase: pauseSubscriptionUseCase,
-        localDataSource: localDataSource,
       );
 
       await controller.loadSubscriptionData();
@@ -648,6 +741,38 @@ void main() {
     test('Toggles pause subscription status', () async {
       final updated = await pauseSubscriptionUseCase(isPaused: true);
       expect(updated.isPaused, isTrue);
+    });
+
+    test('ScheduleController blocks duplicate concurrent action executions',
+        () async {
+      final controller = ScheduleController(
+        getSubscriptionUseCase: getSubscriptionUseCase,
+        skipMealItemUseCase: skipMealItemUseCase,
+        skipMealItemsBatchUseCase: skipMealItemsBatchUseCase,
+        swapMealItemUseCase: swapMealItemUseCase,
+        moveOrderItemsUseCase: moveOrderItemsUseCase,
+        moveMealItemsBatchUseCase: moveMealItemsBatchUseCase,
+        rescheduleOrderUseCase: rescheduleOrderUseCase,
+        toggleDeliverySlotUseCase: toggleDeliverySlotUseCase,
+        pauseSubscriptionUseCase: pauseSubscriptionUseCase,
+      );
+      await controller.loadSubscriptionData();
+
+      int executions = 0;
+      final f1 = controller.runWithBlockingLoading(() async {
+        await Future.delayed(const Duration(milliseconds: 50));
+        executions++;
+      }, message: 'Action 1');
+
+      // Simultaneous duplicate trigger while f1 is in flight
+      final f2 = controller.runWithBlockingLoading(() async {
+        executions++;
+      }, message: 'Action 2');
+
+      await Future.wait([f1, f2]);
+      expect(executions, 1,
+          reason: 'Second action must be dropped by mutex lock');
+      expect(controller.isMutating.value, isFalse);
     });
   });
 }

@@ -1,0 +1,84 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Vendor {
+  id           String               @id @default(uuid())
+  name         String
+  logoUrl      String
+  planName     String
+  planSummary  String
+  timezone     String               @default("Asia/Kolkata")
+  isPaused     Boolean              @default(false)
+  schedules    DailySchedule[]
+  slotConfigs  DeliverySlotConfig[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+}
+
+model DeliverySlotConfig {
+  id                   String   @id @default(uuid())
+  vendorId             String
+  vendor               Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name                 String
+  displayTime          String
+  startTime            String
+  endTime              String
+  cutoffTime           String
+  cutoffNoticeTemplate String
+  displayOrder         Int      @default(1)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([vendorId, isActive])
+}
+
+model DailySchedule {
+  id        String      @id @default(uuid())
+  vendorId  String
+  vendor    Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  date      DateTime
+  dayOfWeek String
+  dayNumber Int
+  orders    MealOrder[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([vendorId, date])
+}
+
+model MealOrder {
+  id              String        @id @default(uuid())
+  scheduleId      String
+  schedule        DailySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  orderNumber     Int
+  orderType       String        @default("Delivery")
+  location        String        @default("Home")
+  timeWindow      String
+  isSlotActive    Boolean       @default(true)
+  cutoffNotice    String
+  previewImageUrl String
+  items           MealItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model MealItem {
+  id           String    @id @default(uuid())
+  orderId      String
+  order        MealOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name         String
+  calories     Int
+  fatGrams     Int
+  proteinGrams Int
+  carbGrams    Int
+  imageUrl     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

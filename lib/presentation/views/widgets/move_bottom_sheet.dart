@@ -4,6 +4,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../../../domain/entities/daily_schedule.dart';
 import '../../../domain/entities/meal_order.dart';
+import 'app_loading_overlay.dart';
 
 class MoveBottomSheet extends StatefulWidget {
   final MealOrder? currentOrder;
@@ -28,6 +29,7 @@ class MoveBottomSheet extends StatefulWidget {
 class _MoveBottomSheetState extends State<MoveBottomSheet> {
   late DateTime _selectedTargetDate;
   int _selectedOrderNumber = 1;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -233,22 +235,34 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: () => widget.onMoveConfirmed(
-                  _selectedTargetDate,
-                  _selectedOrderNumber,
-                ),
+                onPressed: _isSubmitting
+                    ? null
+                    : () {
+                        setState(() => _isSubmitting = true);
+                        widget.onMoveConfirmed(
+                          _selectedTargetDate,
+                          _selectedOrderNumber,
+                        );
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryDark,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFE5E7EB),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Confirm Move',
-                  style: AppTextStyles.actionButton,
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: AppCustomSpinner(size: 20, color: Colors.white),
+                      )
+                    : const Text(
+                        'Confirm Move',
+                        style: AppTextStyles.actionButton,
+                      ),
               ),
             ),
           ],
