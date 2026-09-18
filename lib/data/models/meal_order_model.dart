@@ -11,6 +11,7 @@ class MealOrderModel {
   final String cutoffNotice;
   final List<MealItemModel> items;
   final String previewImageUrl;
+  final bool isPastCutoff;
 
   const MealOrderModel({
     required this.id,
@@ -22,6 +23,7 @@ class MealOrderModel {
     required this.cutoffNotice,
     required this.items,
     required this.previewImageUrl,
+    this.isPastCutoff = false,
   });
 
   factory MealOrderModel.fromJson(Map<String, dynamic> json) {
@@ -33,6 +35,7 @@ class MealOrderModel {
       timeWindow: json['timeWindow'] as String,
       isSlotActive: json['isSlotActive'] as bool? ?? true,
       cutoffNotice: json['cutoffNotice'] as String,
+      isPastCutoff: json['isPastCutoff'] as bool? ?? false,
       items: (json['items'] as List<dynamic>)
           .map((e) => MealItemModel.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -49,6 +52,7 @@ class MealOrderModel {
       'timeWindow': timeWindow,
       'isSlotActive': isSlotActive,
       'cutoffNotice': cutoffNotice,
+      'isPastCutoff': isPastCutoff,
       'items': items.map((e) => e.toJson()).toList(),
       'previewImageUrl': previewImageUrl,
     };
@@ -63,6 +67,7 @@ class MealOrderModel {
       timeWindow: timeWindow,
       isSlotActive: isSlotActive,
       cutoffNotice: cutoffNotice,
+      isPastCutoff: isPastCutoff,
       items: items.map((e) => e.toEntity()).toList(),
       previewImageUrl: previewImageUrl,
     );
@@ -77,6 +82,7 @@ class MealOrderModel {
       timeWindow: entity.timeWindow,
       isSlotActive: entity.isSlotActive,
       cutoffNotice: entity.cutoffNotice,
+      isPastCutoff: entity.isPastCutoff,
       items: entity.items.map((e) => MealItemModel.fromEntity(e)).toList(),
       previewImageUrl: entity.previewImageUrl,
     );

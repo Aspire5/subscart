@@ -112,11 +112,8 @@ class ScheduleController extends GetxController {
       final data = await getSubscriptionUseCase();
       subscription.value = data;
 
-      // Default selected date to the second schedule day (Tue 15th) if available
       if (data.schedules.isNotEmpty) {
-        final tue15 =
-            data.schedules.firstWhereOrNull((s) => s.dayNumber == 15);
-        selectedDate.value = tue15?.date ?? data.schedules.first.date;
+        selectedDate.value = data.schedules.first.date;
       }
       clearSelection();
     } finally {

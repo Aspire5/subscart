@@ -97,3 +97,17 @@ export function normalizeDateToUtcMidnight(input) {
   const day = date.getUTCDate();
   return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
 }
+
+/**
+ * Checks whether a delivery slot's cutoff time ("HH:mm") has passed in the vendor's timezone.
+ * @param {string} cutoffTime - "HH:mm"
+ * @param {string} timezone - IANA timezone
+ * @param {Date} [referenceDate=new Date()]
+ * @returns {boolean}
+ */
+export function isSlotCutoffPassed(cutoffTime, timezone, referenceDate = new Date()) {
+  if (!cutoffTime) return false;
+  const { timeString } = getLocalVendorDateTime(timezone, referenceDate);
+  return compareTimes(timeString, cutoffTime) >= 0;
+}
+

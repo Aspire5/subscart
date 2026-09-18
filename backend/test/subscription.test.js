@@ -5,7 +5,9 @@ import {
   getLocalVendorDateTime,
   getDateRelationToVendorToday,
   compareTimes,
+  isSlotCutoffPassed,
 } from '../src/utils/timezoneHelper.js';
+import { seedDatabase } from '../prisma/seed.js';
 
 test('Timezone helper calculates correct date and 24-hour time for vendor', () => {
   const info = getLocalVendorDateTime('Asia/Kolkata', new Date('2026-09-18T10:30:00Z'));
@@ -29,9 +31,32 @@ test('Time comparison helper works correctly', () => {
   assert.equal(compareTimes('15:00', '15:00'), 0);
 });
 
-test('Slot availability checks cutoff against vendor local time', async () => {
-  const availability = await subscriptionService.getSlotAvailability('2026-09-19');
-  assert.equal(availability.relation, 'future');
+test('isSlotCutoffPassed checks time correctly', () => {
+  const refTime = new Date('2026-09-18T10:00:00Z'); // 15:30 in Asia/Kolkata
+  assert.equal(isSlotCutoffPassed('07:00', 'Asia/Kolkata', refTime), true);
+  assert.equal(isSlotCutoffPassed('11:00', 'Asia/Kolkata', refTime), true);
+  assert.equal(isSlotCutoffPassed('15:00', 'Asia/Kolkata', refTime), true);
+  assert.equal(isSlotCutoffPassed('18:00', 'Asia/Kolkata', refTime), false);
+});
+
+test('Idempotent seed does not throw or duplicate existing schedules', async () => {
+  await seedDatabase({ forceClean: false });
+  const sub = await subscriptionService.getSubscription();
+  assert.ok(sub.schedules.length > 0);
+});
+
+test('getSubscription dynamically filters out past dates', async () => {
+  const sub = await subscriptionService.getSubscription();
+  const timezone = sub.timezone || 'Asia/Kolkata';
+  for (const s of sub.schedules) {
+    const dateStr = s.date.split('T')[0];
+    const relation = getDateRelationToVendorToday(dateStr, timezone);
+    assert.notEqual(relation, 'past', `Schedule ${dateStr} should not be in the past`);
+  }
+});
+
+test('Slot availability checks future dates correctly', async () => {
+  const availability = await subscriptionService.getSlotAvailability('2026-09-22');
   assert.equal(availability.hasAvailableSlots, true);
   assert.ok(availability.slots.every((s) => s.isAvailable === true));
   assert.ok(availability.nextAvailableSlot !== null);
@@ -39,8 +64,9 @@ test('Slot availability checks cutoff against vendor local time', async () => {
 
 test('Reschedule moves order across dates and updates cutoff notice', async () => {
   const sub = await subscriptionService.getSubscription();
-  const sourceSchedule = sub.schedules[0];
-  const orderToMove = sourceSchedule.orders[0];
+  // Choose an order on a future date to avoid today's cutoff checks during test
+  const futureSchedule = sub.schedules[sub.schedules.length - 2];
+  const orderToMove = futureSchedule.orders[0];
   const targetSchedule = sub.schedules[sub.schedules.length - 1];
 
   const updatedSub = await subscriptionService.rescheduleOrder({

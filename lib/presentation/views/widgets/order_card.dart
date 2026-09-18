@@ -170,16 +170,16 @@ class OrderCard extends StatelessWidget {
                 // Time Slot Item (Tappable to reschedule)
                 Expanded(
                   child: InkWell(
-                    onTap: onReschedule,
+                    onTap: order.isPastCutoff ? null : onReschedule,
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.schedule_outlined,
+                          Icon(
+                            order.isPastCutoff ? Icons.lock_outline_rounded : Icons.schedule_outlined,
                             size: 16,
-                            color: AppColors.textPrimary,
+                            color: order.isPastCutoff ? AppColors.textMuted : AppColors.textPrimary,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -187,15 +187,16 @@ class OrderCard extends StatelessWidget {
                               order.timeWindow,
                               style: AppTextStyles.chipText.copyWith(
                                 fontWeight: FontWeight.w600,
+                                color: order.isPastCutoff ? AppColors.textMuted : AppColors.textPrimary,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 2),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
+                          Icon(
+                            order.isPastCutoff ? Icons.lock_outline_rounded : Icons.chevron_right_rounded,
+                            size: order.isPastCutoff ? 14 : 18,
                             color: AppColors.textMuted,
                           ),
                         ],
@@ -221,31 +222,52 @@ class OrderCard extends StatelessWidget {
               CupertinoSwitch(
                 value: order.isSlotActive,
                 activeTrackColor: AppColors.primaryDark,
-                onChanged: onSlotToggle,
+                onChanged: order.isPastCutoff ? null : onSlotToggle,
               ),
             ],
           ),
           const SizedBox(height: 2),
 
           // Cut-off Notice
-          RichText(
-            text: TextSpan(
-              text: 'Edits allowed until ',
-              style: AppTextStyles.bodyNotice,
+          if (order.isPastCutoff)
+            Row(
               children: [
-                TextSpan(
-                  text: _extractCutoffTime(order.cutoffNotice),
+                const Icon(
+                  Icons.history_toggle_off_rounded,
+                  size: 14,
+                  color: Color(0xFFD97706),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  order.cutoffNotice.isNotEmpty
+                      ? order.cutoffNotice
+                      : 'Cut-off passed • Order in preparation',
                   style: AppTextStyles.bodyNotice.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: const Color(0xFFD97706),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                TextSpan(
-                  text: _extractCutoffRest(order.cutoffNotice),
-                ),
               ],
+            )
+          else
+            RichText(
+              text: TextSpan(
+                text: 'Edits allowed until ',
+                style: AppTextStyles.bodyNotice,
+                children: [
+                  TextSpan(
+                    text: _extractCutoffTime(order.cutoffNotice),
+                    style: AppTextStyles.bodyNotice.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  TextSpan(
+                    text: _extractCutoffRest(order.cutoffNotice),
+                  ),
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 10),
           Container(height: 1, color: AppColors.divider),
 

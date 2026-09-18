@@ -10,6 +10,7 @@ class MealOrder {
   final String cutoffNotice;
   final List<MealItem> items;
   final String previewImageUrl;
+  final bool isPastCutoff;
 
   const MealOrder({
     required this.id,
@@ -21,6 +22,7 @@ class MealOrder {
     required this.cutoffNotice,
     required this.items,
     required this.previewImageUrl,
+    this.isPastCutoff = false,
   });
 
   MealOrder copyWith({
@@ -33,6 +35,7 @@ class MealOrder {
     String? cutoffNotice,
     List<MealItem>? items,
     String? previewImageUrl,
+    bool? isPastCutoff,
   }) {
     return MealOrder(
       id: id ?? this.id,
@@ -44,6 +47,7 @@ class MealOrder {
       cutoffNotice: cutoffNotice ?? this.cutoffNotice,
       items: items ?? this.items,
       previewImageUrl: previewImageUrl ?? this.previewImageUrl,
+      isPastCutoff: isPastCutoff ?? this.isPastCutoff,
     );
   }
 }

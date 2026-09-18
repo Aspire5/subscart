@@ -9,7 +9,59 @@ import { seedDatabase } from '../../prisma/seed.js';
 
 class SubscriptionService {
   /**
-   * Retrieves the active vendor and full subscription schedule.
+   * Asserts that an order is eligible for modifications:
+   * 1. Not from a past date.
+   * 2. If today, its delivery window cutoff time has not passed.
+   * Throws an error if cutoff has passed.
+   */
+  async _assertOrderEditable(orderId) {
+    const order = await prisma.mealOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        schedule: {
+          include: {
+            vendor: {
+              include: {
+                slotConfigs: { where: { isActive: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    const vendor = order.schedule.vendor;
+    const timezone = vendor.timezone || 'Asia/Kolkata';
+    const scheduleDateStr = order.schedule.date.toISOString().split('T')[0];
+    const relation = getDateRelationToVendorToday(scheduleDateStr, timezone);
+
+    if (relation === 'past') {
+      throw new Error('Modifications closed: Cannot edit an order from a past date');
+    }
+
+    if (relation === 'today') {
+      const vendorNow = getLocalVendorDateTime(timezone);
+      const matchedSlot = vendor.slotConfigs.find(
+        (s) =>
+          s.displayTime.toLowerCase() === order.timeWindow.toLowerCase() ||
+          s.name.toLowerCase() === order.timeWindow.toLowerCase()
+      );
+      if (matchedSlot && compareTimes(vendorNow.timeString, matchedSlot.cutoffTime) >= 0) {
+        throw new Error(
+          `Modifications closed: Cut-off time (${matchedSlot.cutoffTime}) has passed for this delivery window`
+        );
+      }
+    }
+
+    return order;
+  }
+
+  /**
+   * Retrieves the active vendor and full subscription schedule, filtering out past dates.
    */
   async getSubscription() {
     let vendor = await prisma.vendor.findFirst({
@@ -75,7 +127,6 @@ class SubscriptionService {
         isAvailable = false;
         reason = 'Selected date is in the past';
       } else if (relation === 'today') {
-        // Check if the cut-off time has passed in the vendor's timezone
         const isCutoffPassed = compareTimes(vendorNow.timeString, slot.cutoffTime) >= 0;
         if (isCutoffPassed) {
           isAvailable = false;
@@ -98,57 +149,45 @@ class SubscriptionService {
     });
 
     const availableSlots = slots.filter((s) => s.isAvailable);
-    const nextAvailableSlot = availableSlots.length > 0 ? availableSlots[0] : null;
+    const hasAvailableSlots = availableSlots.length > 0;
+    const nextAvailableSlot = hasAvailableSlots ? availableSlots[0] : null;
 
     return {
       targetDate,
       vendorTimezone: timezone,
       vendorCurrentTime: vendorNow.timeString,
-      vendorCurrentDate: vendorNow.dateString,
-      relation,
-      hasAvailableSlots: availableSlots.length > 0,
-      nextAvailableSlot,
+      hasAvailableSlots,
+      nextAvailableSlot: nextAvailableSlot
+        ? {
+            id: nextAvailableSlot.id,
+            name: nextAvailableSlot.name,
+            displayTime: nextAvailableSlot.displayTime,
+            cutoffTime: nextAvailableSlot.cutoffTime,
+            cutoffNotice: nextAvailableSlot.cutoffNotice,
+          }
+        : null,
       slots,
     };
   }
 
   /**
-   * Reschedules an entire meal order to a different target date and time window.
+   * Reschedules an order to a target date and delivery slot with transactional safety.
    */
   async rescheduleOrder({ orderId, targetDate, targetSlot, targetSlotId }) {
     if (!orderId || !targetDate) {
       throw new Error('orderId and targetDate are required');
     }
 
-    const order = await prisma.mealOrder.findUnique({
-      where: { id: orderId },
-      include: {
-        schedule: {
-          include: { vendor: true },
-        },
-      },
-    });
-
-    if (!order) {
-      throw new Error(`Order with ID ${orderId} not found`);
-    }
-
+    // Assert source order is editable
+    const order = await this._assertOrderEditable(orderId);
     const vendorId = order.schedule.vendorId;
-    const vendor = await prisma.vendor.findUnique({
-      where: { id: vendorId },
-      include: {
-        slotConfigs: {
-          where: { isActive: true },
-          orderBy: { displayOrder: 'asc' },
-        },
-      },
-    });
+    const vendor = order.schedule.vendor;
 
     // Resolve target date in UTC midnight
     const normalizedTargetDate = normalizeDateToUtcMidnight(targetDate);
     const targetDateStr = normalizedTargetDate.toISOString().split('T')[0];
 
-    // Check slot availability
+    // Check slot availability for the target date
     const availability = await this.getSlotAvailability(targetDateStr);
     if (!availability.hasAvailableSlots) {
       throw new Error(`No available delivery slots remaining on ${targetDateStr}`);
@@ -173,7 +212,6 @@ class SubscriptionService {
     } else {
       const slotStatus = availability.slots.find((s) => s.id === selectedSlotConfig.id);
       if (slotStatus && !slotStatus.isAvailable) {
-        // Fallback to next available slot
         selectedSlotConfig = vendor.slotConfigs.find(
           (s) => s.id === availability.nextAvailableSlot?.id
         );
@@ -187,14 +225,12 @@ class SubscriptionService {
     const newTimeWindow = selectedSlotConfig.displayTime;
     const newCutoffNotice = selectedSlotConfig.cutoffNoticeTemplate;
 
-    // Day of week and day number for target date
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const targetDayOfWeek = dayNames[normalizedTargetDate.getUTCDay()];
     const targetDayNumber = normalizedTargetDate.getUTCDate();
 
     // Execute atomic transaction
     await prisma.$transaction(async (tx) => {
-      // Find or create target daily schedule
       let targetSchedule = await tx.dailySchedule.findUnique({
         where: {
           vendorId_date: {
@@ -221,21 +257,30 @@ class SubscriptionService {
         });
       }
 
-      const nextOrderNumber = targetSchedule.orders.length + 1;
+      const isSameSchedule = order.scheduleId === targetSchedule.id;
 
-      // Update the order to belong to the new schedule
-      await tx.mealOrder.update({
-        where: { id: orderId },
-        data: {
-          scheduleId: targetSchedule.id,
-          orderNumber: nextOrderNumber,
-          timeWindow: newTimeWindow,
-          cutoffNotice: newCutoffNotice,
-        },
-      });
+      if (isSameSchedule) {
+        await tx.mealOrder.update({
+          where: { id: orderId },
+          data: {
+            timeWindow: newTimeWindow,
+            cutoffNotice: newCutoffNotice,
+          },
+        });
+      } else {
+        const nextOrderNumber = targetSchedule.orders.length + 1;
 
-      // Re-index orders in the source schedule if it differs
-      if (order.scheduleId !== targetSchedule.id) {
+        await tx.mealOrder.update({
+          where: { id: orderId },
+          data: {
+            scheduleId: targetSchedule.id,
+            orderNumber: nextOrderNumber,
+            timeWindow: newTimeWindow,
+            cutoffNotice: newCutoffNotice,
+          },
+        });
+
+        // Renumber remaining orders in source schedule
         const remainingSourceOrders = await tx.mealOrder.findMany({
           where: { scheduleId: order.scheduleId },
           orderBy: { orderNumber: 'asc' },
@@ -261,13 +306,18 @@ class SubscriptionService {
       throw new Error('sourceOrderToItemIdsMap and targetOrderId are required');
     }
 
+    // Verify source and target orders are editable
+    for (const sourceOrderId of Object.keys(sourceOrderToItemIdsMap)) {
+      await this._assertOrderEditable(sourceOrderId);
+    }
+    await this._assertOrderEditable(targetOrderId);
+
     const itemIdsToMove = Object.values(sourceOrderToItemIdsMap).flat();
     if (itemIdsToMove.length === 0) {
       return this.getSubscription();
     }
 
     await prisma.$transaction(async (tx) => {
-      // Update items to target order
       await tx.mealItem.updateMany({
         where: { id: { in: itemIdsToMove } },
         data: { orderId: targetOrderId },
@@ -285,12 +335,21 @@ class SubscriptionService {
       throw new Error('sourceItemId and targetItemId are required');
     }
 
-    const sourceItem = await prisma.mealItem.findUnique({ where: { id: sourceItemId } });
-    const targetItem = await prisma.mealItem.findUnique({ where: { id: targetItemId } });
+    const sourceItem = await prisma.mealItem.findUnique({
+      where: { id: sourceItemId },
+      include: { order: true },
+    });
+    const targetItem = await prisma.mealItem.findUnique({
+      where: { id: targetItemId },
+      include: { order: true },
+    });
 
     if (!sourceItem || !targetItem) {
       throw new Error('One or both items to swap do not exist');
     }
+
+    await this._assertOrderEditable(sourceItem.orderId);
+    await this._assertOrderEditable(targetItem.orderId);
 
     await prisma.$transaction(async (tx) => {
       await tx.mealItem.update({
@@ -315,6 +374,10 @@ class SubscriptionService {
       throw new Error('orderToItemIdsMap is required');
     }
 
+    for (const orderId of Object.keys(orderToItemIdsMap)) {
+      await this._assertOrderEditable(orderId);
+    }
+
     const itemIds = Object.values(orderToItemIdsMap).flat();
     if (itemIds.length === 0) {
       return this.getSubscription();
@@ -334,6 +397,8 @@ class SubscriptionService {
     if (!orderId || typeof isActive !== 'boolean') {
       throw new Error('orderId and isActive (boolean) are required');
     }
+
+    await this._assertOrderEditable(orderId);
 
     await prisma.mealOrder.update({
       where: { id: orderId },
@@ -368,14 +433,31 @@ class SubscriptionService {
    * Resets database back to default seed data for demonstration.
    */
   async resetData() {
-    await seedDatabase();
+    await seedDatabase({ forceClean: true });
     return this.getSubscription();
   }
 
   /**
    * Formats the Prisma vendor aggregate into the exact JSON structure expected by the Flutter app.
+   * Filters out past dates and flags today's orders whose cutoff has passed.
    */
   _formatSubscriptionResponse(vendor) {
+    const timezone = vendor.timezone || 'Asia/Kolkata';
+    const vendorNow = getLocalVendorDateTime(timezone);
+
+    // Filter out past schedules dynamically
+    const upcomingSchedules = vendor.schedules.filter((schedule) => {
+      const scheduleDateStr = schedule.date.toISOString().split('T')[0];
+      return getDateRelationToVendorToday(scheduleDateStr, timezone) !== 'past';
+    });
+
+    // Create lookup map for slot cutoff times
+    const slotMap = new Map();
+    for (const slot of vendor.slotConfigs) {
+      slotMap.set(slot.displayTime.toLowerCase(), slot);
+      slotMap.set(slot.name.toLowerCase(), slot);
+    }
+
     return {
       vendorId: vendor.id,
       vendorName: vendor.name,
@@ -394,30 +476,50 @@ class SubscriptionService {
         cutoffNotice: slot.cutoffNoticeTemplate,
         displayOrder: slot.displayOrder,
       })),
-      schedules: vendor.schedules.map((schedule) => ({
-        date: schedule.date.toISOString(),
-        dayOfWeek: schedule.dayOfWeek,
-        dayNumber: schedule.dayNumber,
-        orders: schedule.orders.map((order) => ({
-          id: order.id,
-          orderNumber: order.orderNumber,
-          orderType: order.orderType,
-          location: order.location,
-          timeWindow: order.timeWindow,
-          isSlotActive: order.isSlotActive,
-          cutoffNotice: order.cutoffNotice,
-          previewImageUrl: order.previewImageUrl,
-          items: order.items.map((item) => ({
-            id: item.id,
-            name: item.name,
-            calories: item.calories,
-            fatGrams: item.fatGrams,
-            proteinGrams: item.proteinGrams,
-            carbGrams: item.carbGrams,
-            imageUrl: item.imageUrl,
-          })),
-        })),
-      })),
+      schedules: upcomingSchedules.map((schedule) => {
+        const scheduleDateStr = schedule.date.toISOString().split('T')[0];
+        const isToday = getDateRelationToVendorToday(scheduleDateStr, timezone) === 'today';
+
+        return {
+          date: schedule.date.toISOString(),
+          dayOfWeek: schedule.dayOfWeek,
+          dayNumber: schedule.dayNumber,
+          orders: schedule.orders.map((order) => {
+            let isPastCutoff = false;
+            let displayCutoffNotice = order.cutoffNotice;
+
+            if (isToday) {
+              const matchedSlot = slotMap.get(order.timeWindow.toLowerCase());
+              const cutoffTime = matchedSlot?.cutoffTime;
+              if (cutoffTime && compareTimes(vendorNow.timeString, cutoffTime) >= 0) {
+                isPastCutoff = true;
+                displayCutoffNotice = 'Cut-off passed • Order in preparation';
+              }
+            }
+
+            return {
+              id: order.id,
+              orderNumber: order.orderNumber,
+              orderType: order.orderType,
+              location: order.location,
+              timeWindow: order.timeWindow,
+              isSlotActive: order.isSlotActive,
+              cutoffNotice: displayCutoffNotice,
+              isPastCutoff,
+              previewImageUrl: order.previewImageUrl,
+              items: order.items.map((item) => ({
+                id: item.id,
+                name: item.name,
+                calories: item.calories,
+                fatGrams: item.fatGrams,
+                proteinGrams: item.proteinGrams,
+                carbGrams: item.carbGrams,
+                imageUrl: item.imageUrl,
+              })),
+            };
+          }),
+        };
+      }),
     };
   }
 }

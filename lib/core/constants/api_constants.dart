@@ -1,47 +1,9 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
-
-/// Centralized API configuration for Subscart.
-/// Base URLs and all backend endpoints are defined here for easy editing.
 class ApiConstants {
   ApiConstants._();
 
-  // ===========================================================================
-  // 1. BASE URL CONFIGURATION (Edit this section to switch environments)
-  // ===========================================================================
+  static const String baseUrl = 'http://15.207.19.237:3000/api';
 
-  /// Set this to your live production backend URL (e.g., Railway, AWS, Render).
-  /// If set, the app will always prioritize this over localhost URLs.
-  ///
-  /// Examples:
-  ///   'https://subscart-backend.up.railway.app/api'
-  ///   'https://api.yourdomain.com/api'
-  ///   'http://15.207.19.237:3000/api' (AWS EC2 deployment)
-  static const String productionBaseUrl = 'http://15.207.19.237:3000/api';
-
-  /// Android Emulator requires '10.0.2.2' to access host machine's localhost.
-  static const String localAndroidBaseUrl = 'http://10.0.2.2:3000/api';
-
-  /// iOS Simulator, macOS Desktop, and Web connect directly to 'localhost'.
-  static const String localDefaultBaseUrl = 'http://localhost:3000/api';
-
-  /// Resolves the active Base URL automatically based on runtime platform.
-  static String get baseUrl {
-    if (productionBaseUrl.trim().isNotEmpty) {
-      return productionBaseUrl.trim();
-    }
-    if (!kIsWeb && Platform.isAndroid) {
-      return localAndroidBaseUrl;
-    }
-    return localDefaultBaseUrl;
-  }
-
-  // ===========================================================================
-  // 2. API ENDPOINTS (Node.js / Express Backend Routes)
-  // ===========================================================================
-
-  /// GET /api/health
-  /// Server and database connection status check
+  // Endpoints
   static const String health = '/health';
 
   /// GET /api/subscription
