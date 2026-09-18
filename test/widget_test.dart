@@ -1252,5 +1252,141 @@ void main() {
 
       expect(onConfirmCalled, true);
     });
+
+    testWidgets('MoveBottomSheet only renders actual orders present on the selected schedule, ignoring ghost orders',
+        (tester) async {
+      final scheduleWithTwoOrders = DailySchedule(
+        date: DateTime(2026, 9, 19),
+        dayOfWeek: 'Sat',
+        dayNumber: 19,
+        orders: const [
+          MealOrder(
+            id: 'ord_19_1',
+            orderNumber: 1,
+            orderType: 'Delivery',
+            location: 'Home',
+            timeWindow: '8:00 am - 9:00 am',
+            isSlotActive: true,
+            cutoffNotice: 'Edits allowed until 7:00 AM',
+            isPastCutoff: false,
+            previewImageUrl: '',
+            items: [],
+          ),
+          MealOrder(
+            id: 'ord_19_2',
+            orderNumber: 2,
+            orderType: 'Delivery',
+            location: 'Home',
+            timeWindow: '12:30 pm - 1:30 pm',
+            isSlotActive: true,
+            cutoffNotice: 'Edits allowed until 11:00 AM',
+            isPastCutoff: false,
+            previewImageUrl: '',
+            items: [],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MoveBottomSheet(
+              currentDate: DateTime(2026, 9, 20),
+              itemCount: 1,
+              availableDays: [scheduleWithTwoOrders],
+              onMoveConfirmed: (_, __) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify that only Order 1 and Order 2 are present
+      expect(find.text('Order 1'), findsOneWidget);
+      expect(find.text('Order 2'), findsOneWidget);
+      // Verify ghost Order 3 is NOT rendered
+      expect(find.text('Order 3'), findsNothing);
+    });
+
+    testWidgets('SwapBottomSheet displays order delivery time window and cutoff notice',
+        (tester) async {
+      const sourceOrder = MealOrder(
+        id: 'ord_src',
+        orderNumber: 1,
+        orderType: 'Delivery',
+        location: 'Home',
+        timeWindow: '8:00 am - 9:00 am',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 7:00 AM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [],
+      );
+
+      const targetOrder = MealOrder(
+        id: 'ord_tgt',
+        orderNumber: 2,
+        orderType: 'Delivery',
+        location: 'Home',
+        timeWindow: '12:30 pm - 1:30 pm',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 11:00 AM the day of your Order.',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [
+          MealItem(
+            id: 'item_tgt_1',
+            name: 'Mediterranean Salad',
+            calories: 220,
+            fatGrams: 10,
+            proteinGrams: 8,
+            carbGrams: 20,
+            imageUrl: '',
+          ),
+        ],
+      );
+
+      final targetSchedule = DailySchedule(
+        date: DateTime(2026, 9, 21),
+        dayOfWeek: 'Mon',
+        dayNumber: 21,
+        orders: const [targetOrder],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SwapBottomSheet(
+              sourceItems: [
+                SelectedSwapSource(
+                  item: const MealItem(
+                    id: 'item_src_1',
+                    name: 'Herb Crust Salmon Bowl',
+                    calories: 450,
+                    fatGrams: 18,
+                    proteinGrams: 32,
+                    carbGrams: 40,
+                    imageUrl: '',
+                  ),
+                  order: sourceOrder,
+                  date: DateTime(2026, 9, 20),
+                ),
+              ],
+              availableDays: [targetSchedule],
+              onAllSwapsConfirmed: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Current meal displays time window and cutoff notice
+      expect(find.textContaining('8:00 am - 9:00 am'), findsWidgets);
+      expect(find.text('Edits allowed until 7:00 AM'), findsOneWidget);
+
+      // Candidate meal displays time window and cutoff notice
+      expect(find.textContaining('12:30 pm - 1:30 pm'), findsWidgets);
+      expect(find.text('Edits allowed until 11:00 AM the day of your Order.'), findsOneWidget);
+    });
   });
 }

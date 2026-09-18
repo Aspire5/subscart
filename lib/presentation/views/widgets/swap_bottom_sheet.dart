@@ -316,7 +316,7 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            'Order ${source.order.orderNumber} • ${DateFormatter.formatShortDay(source.date)} ${source.date.day}',
+                            'Order ${source.order.orderNumber} (${source.order.timeWindow}) • ${DateFormatter.formatShortDay(source.date)} ${source.date.day}',
                             style: AppTextStyles.helperText.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -335,6 +335,30 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (source.order.cutoffNotice.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 11,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              source.order.cutoffNotice,
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                color: AppColors.textMuted,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -431,6 +455,39 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
         ),
         const SizedBox(height: 8),
 
+        if (targetMeals.isNotEmpty &&
+            targetMeals.every((m) => (m['order'] as MealOrder).isPastCutoff)) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
+            ),
+            child: Row(
+              children: const [
+                Icon(
+                  Icons.history_toggle_off_rounded,
+                  size: 14,
+                  color: Color(0xFFD97706),
+                ),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'All meals on this date have passed their cut-off times and cannot be swapped.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF92400E),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
         ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.36,
@@ -518,11 +575,26 @@ class _SwapBottomSheetState extends State<SwapBottomSheet> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Order ${order.orderNumber} • ${item.calories} kcal',
+                                    'Order ${order.orderNumber} (${order.timeWindow}) • ${item.calories} kcal',
                                     style: AppTextStyles.helperText.copyWith(
                                       color: AppColors.textSecondary,
+                                      fontSize: 11.5,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                  if (order.cutoffNotice.isNotEmpty && !isCutoffPassed) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      order.cutoffNotice,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: AppColors.textMuted,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

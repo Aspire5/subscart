@@ -51,15 +51,20 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
     return false;
   }
 
-  MealOrder? get _selectedTargetOrder {
+  List<MealOrder> get _availableTargetOrders {
     final schedule = _selectedSchedule;
-    if (schedule == null) return null;
-    for (final order in schedule.orders) {
+    if (schedule == null) return [];
+    return schedule.orders;
+  }
+
+  MealOrder? get _selectedTargetOrder {
+    final orders = _availableTargetOrders;
+    for (final order in orders) {
       if (order.orderNumber == _selectedOrderNumber) {
         return order;
       }
     }
-    return null;
+    return orders.isNotEmpty ? orders.first : null;
   }
 
   String _defaultTimeWindowForSlot(int slotNum) {
@@ -89,13 +94,18 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
   }
 
   void _adjustSelectedSlotIfPastCutoff() {
-    if (_isSlotPastCutoff(_selectedOrderNumber)) {
-      for (int i = 1; i <= 3; i++) {
-        if (!_isSlotPastCutoff(i)) {
-          _selectedOrderNumber = i;
+    final orders = _availableTargetOrders;
+    if (orders.isEmpty) return;
+
+    final hasCurrent = orders.any((o) => o.orderNumber == _selectedOrderNumber);
+    if (!hasCurrent || _isSlotPastCutoff(_selectedOrderNumber)) {
+      for (final ord in orders) {
+        if (!_isSlotPastCutoff(ord.orderNumber)) {
+          _selectedOrderNumber = ord.orderNumber;
           return;
         }
       }
+      _selectedOrderNumber = orders.first.orderNumber;
     }
   }
 
@@ -105,14 +115,19 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
     _selectedTargetDate = widget.availableDays.isNotEmpty
         ? widget.availableDays.first.date
         : widget.currentDate.add(const Duration(days: 1));
-    _selectedOrderNumber = widget.currentOrder?.orderNumber ?? 1;
+    final initialOrders = _availableTargetOrders;
+    _selectedOrderNumber = initialOrders.isNotEmpty
+        ? initialOrders.first.orderNumber
+        : (widget.currentOrder?.orderNumber ?? 1);
     _adjustSelectedSlotIfPastCutoff();
   }
 
   @override
   Widget build(BuildContext context) {
     final count = widget.itemCount;
-    final allSlotsClosed = [1, 2, 3].every(_isSlotPastCutoff);
+    final availableOrders = _availableTargetOrders;
+    final allSlotsClosed = availableOrders.isNotEmpty &&
+        availableOrders.every((o) => _isSlotPastCutoff(o.orderNumber));
     final subtitleText = count != null && count > 0
         ? 'Moving $count selected ${count == 1 ? "meal" : "meals"} from ${DateFormatter.formatShortDay(widget.currentDate)} ${widget.currentDate.day}'
         : (widget.currentOrder != null
@@ -253,74 +268,95 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
             ),
             const SizedBox(height: 10),
 
-            Row(
-              children: [1, 2, 3].map((slotNum) {
-                final isPastCutoff = _isSlotPastCutoff(slotNum);
-                final isSelected = !isPastCutoff && _selectedOrderNumber == slotNum;
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: slotNum < 3 ? 8.0 : 0.0,
-                    ),
-                    child: InkWell(
-                      onTap: isPastCutoff
-                          ? null
-                          : () {
-                              setState(() {
-                                _selectedOrderNumber = slotNum;
-                              });
-                            },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isPastCutoff
-                              ? const Color(0xFFF3F4F6)
-                              : (isSelected
-                                  ? const Color(0x14111827)
-                                  : AppColors.chipBackground),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
+            if (availableOrders.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.chipBackground,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.chipBorder),
+                ),
+                child: const Text(
+                  'No orders scheduled on this date to move into.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: availableOrders.map((order) {
+                  final slotNum = order.orderNumber;
+                  final isPastCutoff = _isSlotPastCutoff(slotNum);
+                  final isSelected = !isPastCutoff && _selectedOrderNumber == slotNum;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: order != availableOrders.last ? 8.0 : 0.0,
+                      ),
+                      child: InkWell(
+                        onTap: isPastCutoff
+                            ? null
+                            : () {
+                                setState(() {
+                                  _selectedOrderNumber = slotNum;
+                                });
+                              },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          height: 40,
+                          decoration: BoxDecoration(
                             color: isPastCutoff
-                                ? AppColors.subtleBorder
+                                ? const Color(0xFFF3F4F6)
                                 : (isSelected
-                                    ? AppColors.primaryDark
-                                    : AppColors.chipBorder),
-                            width: isSelected ? 1.5 : 0.8,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (isPastCutoff) ...[
-                              const Icon(
-                                Icons.lock_outline_rounded,
-                                size: 12,
-                                color: AppColors.textMuted,
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                            Text(
-                              'Order $slotNum',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: isPastCutoff
-                                    ? AppColors.textMuted
-                                    : (isSelected
-                                        ? AppColors.primaryDark
-                                        : AppColors.textPrimary),
-                              ),
+                                    ? const Color(0x14111827)
+                                    : AppColors.chipBackground),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isPastCutoff
+                                  ? AppColors.subtleBorder
+                                  : (isSelected
+                                      ? AppColors.primaryDark
+                                      : AppColors.chipBorder),
+                              width: isSelected ? 1.5 : 0.8,
                             ),
-                          ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (isPastCutoff) ...[
+                                const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 12,
+                                  color: AppColors.textMuted,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                'Order $slotNum',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isPastCutoff
+                                      ? AppColors.textMuted
+                                      : (isSelected
+                                          ? AppColors.primaryDark
+                                          : AppColors.textPrimary),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
+                  );
+                }).toList(),
+              ),
             if (allSlotsClosed) ...[
               const SizedBox(height: 8),
               Row(
@@ -343,15 +379,16 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
             ],
 
             // Dynamic Target Order Preview Card
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeInOutCubic,
-              alignment: Alignment.topCenter,
-              child: _buildTargetOrderPreview(
-                _selectedTargetOrder,
-                _isSlotPastCutoff(_selectedOrderNumber),
+            if (availableOrders.isNotEmpty)
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                alignment: Alignment.topCenter,
+                child: _buildTargetOrderPreview(
+                  _selectedTargetOrder,
+                  _isSlotPastCutoff(_selectedOrderNumber),
+                ),
               ),
-            ),
             const SizedBox(height: 18),
 
             // Confirm Move Button
@@ -359,7 +396,10 @@ class _MoveBottomSheetState extends State<MoveBottomSheet> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: (_isSubmitting || allSlotsClosed || _isSlotPastCutoff(_selectedOrderNumber))
+                onPressed: (_isSubmitting ||
+                        availableOrders.isEmpty ||
+                        allSlotsClosed ||
+                        _isSlotPastCutoff(_selectedOrderNumber))
                     ? null
                     : () {
                         setState(() => _isSubmitting = true);
