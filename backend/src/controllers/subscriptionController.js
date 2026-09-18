@@ -63,11 +63,11 @@ class SubscriptionController {
 
   async moveMealItems(req, res, next) {
     try {
-      const { sourceOrderToItemIdsMap, targetDate, targetOrderId } = req.body;
-      if (!sourceOrderToItemIdsMap || !targetOrderId) {
+      const { sourceOrderToItemIdsMap, targetDate, targetOrderId, targetOrderNumber } = req.body;
+      if (!sourceOrderToItemIdsMap || (!targetOrderId && !targetDate)) {
         return res.status(400).json({
           success: false,
-          message: 'sourceOrderToItemIdsMap and targetOrderId are required',
+          message: 'sourceOrderToItemIdsMap and targetOrderId (or targetDate) are required',
         });
       }
 
@@ -75,6 +75,7 @@ class SubscriptionController {
         sourceOrderToItemIdsMap,
         targetDate,
         targetOrderId,
+        targetOrderNumber,
       });
 
       res.status(200).json({

@@ -19,8 +19,9 @@ abstract class SubscriptionRemoteDataSource {
     DateTime sourceDate,
     Map<String, List<String>> sourceOrderToItemIdsMap,
     DateTime targetDate,
-    String targetOrderId,
-  );
+    String? targetOrderId, {
+    int? targetOrderNumber,
+  });
   Future<VendorSubscriptionModel> swapMealItem(
     DateTime sourceDate,
     String sourceOrderId,
@@ -105,17 +106,24 @@ class SubscriptionRemoteDataSourceImpl implements SubscriptionRemoteDataSource {
     DateTime sourceDate,
     Map<String, List<String>> sourceOrderToItemIdsMap,
     DateTime targetDate,
-    String targetOrderId,
-  ) async {
+    String? targetOrderId, {
+    int? targetOrderNumber,
+  }) async {
     final dateStr =
         '${targetDate.year.toString().padLeft(4, '0')}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+    final payload = <String, dynamic>{
+      'sourceOrderToItemIdsMap': sourceOrderToItemIdsMap,
+      'targetDate': dateStr,
+    };
+    if (targetOrderId != null && targetOrderId.isNotEmpty) {
+      payload['targetOrderId'] = targetOrderId;
+    }
+    if (targetOrderNumber != null) {
+      payload['targetOrderNumber'] = targetOrderNumber;
+    }
     final response = await _dio.post(
       ApiConstants.moveItems,
-      data: {
-        'sourceOrderToItemIdsMap': sourceOrderToItemIdsMap,
-        'targetDate': dateStr,
-        'targetOrderId': targetOrderId,
-      },
+      data: payload,
     );
     final data = response.data['data'] as Map<String, dynamic>;
     return VendorSubscriptionModel.fromJson(data);

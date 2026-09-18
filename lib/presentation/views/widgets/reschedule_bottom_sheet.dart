@@ -44,9 +44,9 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
   @override
   void initState() {
     super.initState();
-    // Default to the next day or same day if in schedules
     _selectedDate = widget.currentDate;
-    _selectedSlot = widget.order.timeWindow;
+    _selectedSlot = null;
+    _selectedSlotId = null;
     _loadSlotsForDate(_selectedDate);
   }
 
@@ -60,37 +60,21 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
       final rawSlots = (res['slots'] as List<dynamic>?) ?? [];
       final parsedSlots = rawSlots.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       final hasAvailable = res['hasAvailableSlots'] as bool? ?? parsedSlots.any((s) => s['isAvailable'] == true);
-      final nextSlot = res['nextAvailableSlot'] as Map<String, dynamic>?;
 
-      String? newSelectedSlot = _selectedSlot;
+      String? newSelectedSlot;
       String? newSelectedSlotId;
 
-      // Check if current selected slot is available on this date
-      final matchingCurrent = parsedSlots.firstWhere(
-        (s) =>
-            s['displayTime'] == _selectedSlot ||
-            s['name'] == _selectedSlot,
-        orElse: () => <String, dynamic>{},
-      );
-
-      if (matchingCurrent.isNotEmpty && matchingCurrent['isAvailable'] == true) {
-        newSelectedSlot = matchingCurrent['displayTime'] as String?;
-        newSelectedSlotId = matchingCurrent['id'] as String?;
-      } else if (nextSlot != null && nextSlot['displayTime'] != null) {
-        // Auto-assign to next available slot
-        newSelectedSlot = nextSlot['displayTime'] as String?;
-        newSelectedSlotId = nextSlot['id'] as String?;
-      } else {
-        final firstAvail = parsedSlots.firstWhere(
-          (s) => s['isAvailable'] == true,
+      if (_selectedSlot != null) {
+        final matching = parsedSlots.firstWhere(
+          (s) =>
+              (s['displayTime'] == _selectedSlot || s['name'] == _selectedSlot) &&
+              s['isAvailable'] == true &&
+              s['isCurrentSlot'] != true,
           orElse: () => <String, dynamic>{},
         );
-        if (firstAvail.isNotEmpty) {
-          newSelectedSlot = firstAvail['displayTime'] as String?;
-          newSelectedSlotId = firstAvail['id'] as String?;
-        } else {
-          newSelectedSlot = null;
-          newSelectedSlotId = null;
+        if (matching.isNotEmpty) {
+          newSelectedSlot = matching['displayTime'] as String?;
+          newSelectedSlotId = matching['id'] as String?;
         }
       }
 
@@ -355,12 +339,17 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
               final name = (slot['name'] ?? slot['label'] ?? 'Delivery Window') as String;
               final cutoff = (slot['cutoffNotice'] ?? slot['cutoff'] ?? '') as String;
               final isAvailable = slot['isAvailable'] as bool? ?? true;
-              final isSelected = _selectedSlot == time && isAvailable;
+              final isCurrent = (slot['isCurrentSlot'] as bool? ?? false) ||
+                  (DateFormatter.isSameDay(_selectedDate, widget.currentDate) &&
+                      (time.toLowerCase().trim() == widget.order.timeWindow.toLowerCase().trim() ||
+                          name.toLowerCase().trim() == widget.order.timeWindow.toLowerCase().trim()));
+              final effectiveAvailable = isAvailable && !isCurrent;
+              final isSelected = _selectedSlot == time && effectiveAvailable;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: InkWell(
-                  onTap: isAvailable
+                  onTap: effectiveAvailable
                       ? () {
                           setState(() {
                             _selectedSlot = time;
@@ -373,14 +362,14 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 11),
                     decoration: BoxDecoration(
-                      color: !isAvailable
+                      color: !effectiveAvailable
                           ? const Color(0xFFF9FAFB)
                           : isSelected
                               ? const Color(0x0A111827)
                               : AppColors.chipBackground,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: !isAvailable
+                        color: !effectiveAvailable
                             ? AppColors.subtleBorder.withValues(alpha: 0.5)
                             : isSelected
                                 ? AppColors.primaryDark
@@ -391,13 +380,17 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                     child: Row(
                       children: [
                         Icon(
-                          !isAvailable
-                              ? Icons.block_rounded
+                          !effectiveAvailable
+                              ? (isCurrent
+                                  ? Icons.check_circle_outline_rounded
+                                  : Icons.block_rounded)
                               : isSelected
                                   ? Icons.radio_button_checked
                                   : Icons.radio_button_off,
-                          color: !isAvailable
-                              ? AppColors.textMuted.withValues(alpha: 0.4)
+                          color: !effectiveAvailable
+                              ? (isCurrent
+                                  ? const Color(0xFF64748B)
+                                  : AppColors.textMuted.withValues(alpha: 0.4))
                               : isSelected
                                   ? AppColors.primaryDark
                                   : AppColors.textMuted,
@@ -414,14 +407,19 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                                     time,
                                     style: AppTextStyles.cardHeader.copyWith(
                                       fontSize: 13.5,
-                                      color: isAvailable
+                                      color: effectiveAvailable
                                           ? AppColors.textPrimary
-                                          : AppColors.textMuted,
+                                          : (isCurrent
+                                              ? const Color(0xFF475569)
+                                              : AppColors.textMuted),
                                     ),
                                   ),
-                                  if (!isAvailable) ...[
+                                  if (!effectiveAvailable) ...[
                                     const SizedBox(width: 8),
-                                    _buildSlotStatusBadge(slot['reason'] as String?),
+                                    _buildSlotStatusBadge(
+                                      slot['reason'] as String?,
+                                      isCurrentSlot: isCurrent,
+                                    ),
                                   ] else if (isSelected) ...[
                                     const SizedBox(width: 8),
                                     Container(
@@ -543,7 +541,7 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
     );
   }
 
-  Widget _buildSlotStatusBadge(String? reason) {
+  Widget _buildSlotStatusBadge(String? reason, {bool isCurrentSlot = false}) {
     final lowerReason = (reason ?? '').toLowerCase();
     final isOccupied = lowerReason.contains('occupied');
     final isCutoff = lowerReason.contains('cut-off') || lowerReason.contains('cutoff');
@@ -552,7 +550,11 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
     final Color bgColor;
     final Color textColor;
 
-    if (isOccupied) {
+    if (isCurrentSlot || lowerReason.contains('current')) {
+      label = 'Current Slot';
+      bgColor = const Color(0xFFF1F5F9);
+      textColor = const Color(0xFF475569);
+    } else if (isOccupied) {
       label = 'Occupied';
       bgColor = const Color(0xFFEFF6FF);
       textColor = const Color(0xFF2563EB);

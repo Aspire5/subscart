@@ -177,3 +177,67 @@ test('resetData restores database to original seed state', async () => {
   assert.equal(resetSub.isPaused, false);
 });
 
+test('Rescheduling to same date and same delivery window throws 400 self-reschedule guard', async () => {
+  const sub = await subscriptionService.getSubscription();
+  const futureSchedule = sub.schedules.slice(1).find((s) => s.orders && s.orders.length > 0);
+  assert.ok(futureSchedule);
+  const order = futureSchedule.orders[0];
+
+  await assert.rejects(
+    async () => {
+      await subscriptionService.rescheduleOrder({
+        orderId: order.id,
+        targetDate: futureSchedule.date,
+        targetSlot: order.timeWindow,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.match(err.message, /already scheduled for this delivery window/i);
+      return true;
+    }
+  );
+});
+
+test('getSlotAvailability flags current order slot as isCurrentSlot: true and isAvailable: false', async () => {
+  const sub = await subscriptionService.getSubscription();
+  const futureSchedule = sub.schedules.slice(1).find((s) => s.orders && s.orders.length > 0);
+  assert.ok(futureSchedule);
+  const order = futureSchedule.orders[0];
+  const dateStr = futureSchedule.date.split('T')[0];
+
+  const availability = await subscriptionService.getSlotAvailability(dateStr, order.id);
+  const currentSlot = availability.slots.find(
+    (s) => s.displayTime.toLowerCase().trim() === order.timeWindow.toLowerCase().trim()
+  );
+  assert.ok(currentSlot);
+  assert.equal(currentSlot.isCurrentSlot, true);
+  assert.equal(currentSlot.isAvailable, false);
+});
+
+test('moveMealItems with targetDate and targetOrderNumber dynamically provisions slot and normalizes order numbers', async () => {
+  const sub = await subscriptionService.getSubscription();
+  const sourceSchedule = sub.schedules.slice(1).find((s) => s.orders && s.orders.length > 0);
+  const sourceOrder = sourceSchedule.orders[0];
+  const itemToMove = sourceOrder.items[0];
+
+  // Pick target schedule
+  const targetSchedule = sub.schedules.slice(1).find((s) => s.date !== sourceSchedule.date);
+  assert.ok(targetSchedule);
+
+  const updated = await subscriptionService.moveMealItems({
+    sourceOrderToItemIdsMap: {
+      [sourceOrder.id]: [itemToMove.id],
+    },
+    targetDate: targetSchedule.date,
+    targetOrderNumber: 2,
+  });
+
+  const updatedTargetSchedule = updated.schedules.find((s) => s.id === targetSchedule.id);
+  assert.ok(updatedTargetSchedule);
+  for (let i = 0; i < updatedTargetSchedule.orders.length; i++) {
+    assert.equal(updatedTargetSchedule.orders[i].orderNumber, i + 1);
+  }
+});
+
+

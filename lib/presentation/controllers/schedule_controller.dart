@@ -288,7 +288,15 @@ class ScheduleController extends GetxController {
     final count = selectedItemOrderMap.length;
     await runWithBlockingLoading(() async {
       try {
-        final targetOrderId = 'ord_${targetDate.day}_$targetOrderNumber';
+        final sub = subscription.value;
+        final targetSchedule = sub?.schedules.firstWhereOrNull(
+          (s) => DateFormatter.isSameDay(s.date, targetDate),
+        );
+        final targetOrder = targetSchedule?.orders.firstWhereOrNull(
+          (o) => o.orderNumber == targetOrderNumber,
+        );
+        final targetOrderId = targetOrder?.id;
+
         final sourceOrderToItemIdsMap = <String, List<String>>{};
         for (final entry in selectedItemOrderMap.entries) {
           sourceOrderToItemIdsMap
@@ -301,6 +309,7 @@ class ScheduleController extends GetxController {
           sourceOrderToItemIdsMap: sourceOrderToItemIdsMap,
           targetDate: targetDate,
           targetOrderId: targetOrderId,
+          targetOrderNumber: targetOrderNumber,
         );
 
         subscription.value = updated;
@@ -435,6 +444,16 @@ class ScheduleController extends GetxController {
       final responseData = error.response?.data;
       if (responseData is Map && responseData['message'] != null) {
         final message = responseData['message'].toString().trim();
+        final lower = message.toLowerCase();
+        if (lower.contains('ord_') ||
+            lower.contains('prisma') ||
+            lower.contains('uuid') ||
+            lower.contains('order with id') ||
+            lower.contains('not found in database') ||
+            lower.contains('foreign key') ||
+            lower.contains('constraint')) {
+          return 'The selected delivery slot is no longer available. Please choose another slot or refresh.';
+        }
         if (message.isNotEmpty) return message;
       }
       if (error.type == DioExceptionType.connectionTimeout ||
@@ -446,6 +465,13 @@ class ScheduleController extends GetxController {
       }
     } else if (error is Exception) {
       final str = error.toString().replaceFirst('Exception: ', '').trim();
+      final lower = str.toLowerCase();
+      if (lower.contains('ord_') ||
+          lower.contains('prisma') ||
+          lower.contains('uuid') ||
+          lower.contains('order with id')) {
+        return 'The selected delivery slot is no longer available. Please choose another slot or refresh.';
+      }
       if (str.isNotEmpty && !str.startsWith('Instance of')) {
         return str;
       }

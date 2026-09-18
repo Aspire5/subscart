@@ -110,13 +110,15 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required DateTime sourceDate,
     required Map<String, List<String>> sourceOrderToItemIdsMap,
     required DateTime targetDate,
-    required String targetOrderId,
+    String? targetOrderId,
+    int? targetOrderNumber,
   }) async {
     final model = await _remoteDataSource.moveMealItems(
       sourceDate,
       sourceOrderToItemIdsMap,
       targetDate,
       targetOrderId,
+      targetOrderNumber: targetOrderNumber,
     );
     await _storageService?.saveSubscription(model.toJson());
     return model.toEntity();

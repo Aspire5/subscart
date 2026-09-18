@@ -255,7 +255,8 @@ class FakeSubscriptionRepository implements SubscriptionRepository {
     required DateTime sourceDate,
     required Map<String, List<String>> sourceOrderToItemIdsMap,
     required DateTime targetDate,
-    required String targetOrderId,
+    String? targetOrderId,
+    int? targetOrderNumber,
   }) async {
     List<MealItemModel> itemsToMove = [];
     for (final s in _data.schedules) {
@@ -296,7 +297,10 @@ class FakeSubscriptionRepository implements SubscriptionRepository {
             );
           }
         }
-        if (isTarget && order.id == targetOrderId) {
+        final isMatchingTarget = isTarget &&
+            ((targetOrderId != null && order.id == targetOrderId) ||
+                (targetOrderNumber != null && order.orderNumber == targetOrderNumber));
+        if (isMatchingTarget) {
           return MealOrderModel(
             id: order.id,
             orderNumber: order.orderNumber,
@@ -1059,12 +1063,12 @@ void main() {
         (tester) async {
       const testOrder = MealOrder(
         id: 'ord_resched_test',
-        orderNumber: 1,
+        orderNumber: 3,
         orderType: 'Delivery',
         location: 'Home',
-        timeWindow: '8:00 am - 9:00 am',
+        timeWindow: '7:30 pm - 8:30 pm',
         isSlotActive: true,
-        cutoffNotice: 'Edits allowed until 7:00 AM',
+        cutoffNotice: 'Edits allowed until 6:00 PM',
         isPastCutoff: false,
         previewImageUrl: '',
         items: [],
@@ -1110,8 +1114,63 @@ void main() {
 
       // Verify that the Occupied badge is rendered for slot 1
       expect(find.text('Occupied'), findsOneWidget);
-      expect(find.text('Selected'), findsOneWidget); // Auto-selected slot 2
+      // Verify nothing is pre-selected initially
+      expect(find.text('Selected'), findsNothing);
       expect(find.text('12:30 pm - 1:30 pm'), findsOneWidget);
+    });
+
+    testWidgets('RescheduleBottomSheet renders Current Slot badge for the order own window and nothing pre-selected',
+        (tester) async {
+      const testOrder = MealOrder(
+        id: 'ord_resched_test',
+        orderNumber: 1,
+        orderType: 'Delivery',
+        location: 'Home',
+        timeWindow: '8:00 am - 9:00 am',
+        isSlotActive: true,
+        cutoffNotice: 'Edits allowed until 7:00 AM',
+        isPastCutoff: false,
+        previewImageUrl: '',
+        items: [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RescheduleBottomSheet(
+              order: testOrder,
+              currentDate: DateTime(2026, 9, 20),
+              availableSchedules: const [],
+              onFetchSlotAvailability: (_) async => {
+                'hasAvailableSlots': true,
+                'slots': [
+                  {
+                    'id': 'slot_1',
+                    'name': 'Breakfast Window',
+                    'displayTime': '8:00 am - 9:00 am',
+                    'cutoffNotice': 'Edits allowed until 7:00 AM',
+                    'isAvailable': false,
+                    'isCurrentSlot': true,
+                    'reason': 'Current delivery window',
+                  },
+                  {
+                    'id': 'slot_2',
+                    'name': 'Lunch Window',
+                    'displayTime': '12:30 pm - 1:30 pm',
+                    'cutoffNotice': 'Edits allowed until 11:00 AM',
+                    'isAvailable': true,
+                  },
+                ],
+              },
+              onConfirm: (_, __, ___) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Current Slot'), findsOneWidget);
+      expect(find.text('Selected'), findsNothing);
     });
 
     testWidgets('TopNavBar displays Reset Database option in popup menu and triggers onResetTap',

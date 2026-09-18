@@ -34,7 +34,8 @@ abstract class SubscriptionRepository {
     required DateTime sourceDate,
     required Map<String, List<String>> sourceOrderToItemIdsMap,
     required DateTime targetDate,
-    required String targetOrderId,
+    String? targetOrderId,
+    int? targetOrderNumber,
   });
 
   Future<VendorSubscription> rescheduleOrder({

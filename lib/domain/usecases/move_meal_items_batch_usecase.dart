@@ -10,13 +10,15 @@ class MoveMealItemsBatchUseCase {
     required DateTime sourceDate,
     required Map<String, List<String>> sourceOrderToItemIdsMap,
     required DateTime targetDate,
-    required String targetOrderId,
+    String? targetOrderId,
+    int? targetOrderNumber,
   }) async {
     return await repository.moveMealItems(
       sourceDate: sourceDate,
       sourceOrderToItemIdsMap: sourceOrderToItemIdsMap,
       targetDate: targetDate,
       targetOrderId: targetOrderId,
+      targetOrderNumber: targetOrderNumber,
     );
   }
 }

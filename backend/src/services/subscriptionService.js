@@ -142,9 +142,13 @@ class SubscriptionService {
     });
 
     const occupiedWindows = new Set();
+    let currentOrderWindow = null;
     if (existingSchedule && existingSchedule.orders) {
       for (const ord of existingSchedule.orders) {
-        if (excludeOrderId && ord.id === excludeOrderId) continue;
+        if (excludeOrderId && ord.id === excludeOrderId) {
+          currentOrderWindow = ord.timeWindow.toLowerCase().trim();
+          continue;
+        }
         if (ord.items && ord.items.length > 0) {
           occupiedWindows.add(ord.timeWindow.toLowerCase().trim());
         }
@@ -153,9 +157,18 @@ class SubscriptionService {
 
     const slots = vendor.slotConfigs.map((slot) => {
       let isAvailable = true;
+      let isCurrentSlot = false;
       let reason = null;
 
-      if (relation === 'past') {
+      if (
+        currentOrderWindow &&
+        (currentOrderWindow === slot.displayTime.toLowerCase().trim() ||
+          currentOrderWindow === slot.name.toLowerCase().trim())
+      ) {
+        isAvailable = false;
+        isCurrentSlot = true;
+        reason = 'Current delivery window';
+      } else if (relation === 'past') {
         isAvailable = false;
         reason = 'Selected date is in the past';
       } else if (relation === 'today') {
@@ -185,6 +198,7 @@ class SubscriptionService {
         cutoffNotice: slot.cutoffNoticeTemplate,
         displayOrder: slot.displayOrder,
         isAvailable,
+        isCurrentSlot,
         reason,
       };
     });
@@ -209,6 +223,53 @@ class SubscriptionService {
         : null,
       slots,
     };
+  }
+
+  /**
+   * Re-indexes orderNumber for all orders in a DailySchedule chronologically (1..N).
+   */
+  async _normalizeScheduleOrders(tx, scheduleId) {
+    if (!scheduleId) return;
+
+    const orders = await tx.mealOrder.findMany({
+      where: { scheduleId },
+      include: { items: true },
+    });
+
+    if (orders.length === 0) return;
+
+    const parseStartMinutes = (timeWindow) => {
+      if (!timeWindow) return 0;
+      const startPart = timeWindow.split('-')[0].trim().toLowerCase();
+      const match = startPart.match(/^(\d+)(?::(\d+))?\s*(am|pm)?$/i);
+      if (!match) return 0;
+      let hour = parseInt(match[1], 10);
+      const min = match[2] ? parseInt(match[2], 10) : 0;
+      const meridiem = match[3];
+      if (meridiem === 'pm' && hour < 12) hour += 12;
+      if (meridiem === 'am' && hour === 12) hour = 0;
+      return hour * 60 + min;
+    };
+
+    orders.sort((a, b) => {
+      const minA = parseStartMinutes(a.timeWindow);
+      const minB = parseStartMinutes(b.timeWindow);
+      return minA - minB || a.orderNumber - b.orderNumber;
+    });
+
+    for (let i = 0; i < orders.length; i++) {
+      await tx.mealOrder.update({
+        where: { id: orders[i].id },
+        data: { orderNumber: 1000 + i },
+      });
+    }
+
+    for (let i = 0; i < orders.length; i++) {
+      await tx.mealOrder.update({
+        where: { id: orders[i].id },
+        data: { orderNumber: i + 1 },
+      });
+    }
   }
 
   /**
@@ -245,6 +306,17 @@ class SubscriptionService {
       );
     }
 
+    // Guard against self-reschedule (same date & same delivery window)
+    const orderScheduleDateStr = order.schedule.date.toISOString().split('T')[0];
+    if (orderScheduleDateStr === targetDateStr && selectedSlotConfig) {
+      const isCurrentWindow =
+        selectedSlotConfig.displayTime.toLowerCase().trim() === order.timeWindow.toLowerCase().trim() ||
+        selectedSlotConfig.name.toLowerCase().trim() === order.timeWindow.toLowerCase().trim();
+      if (isCurrentWindow) {
+        throw new AppError('Order is already scheduled for this delivery window', 400);
+      }
+    }
+
     // If requested slot is invalid or unavailable for today, use next available slot
     if (!selectedSlotConfig) {
       selectedSlotConfig = vendor.slotConfigs.find(
@@ -269,6 +341,7 @@ class SubscriptionService {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const targetDayOfWeek = dayNames[normalizedTargetDate.getUTCDay()];
     const targetDayNumber = normalizedTargetDate.getUTCDate();
+    const sourceScheduleId = order.scheduleId;
 
     // Execute atomic transaction
     await prisma.$transaction(async (tx) => {
@@ -321,42 +394,40 @@ class SubscriptionService {
         );
       }
 
-      // Find highest order number on target schedule
-      const maxOrderNumber = targetSchedule.orders.reduce(
-        (max, ord) => (ord.orderNumber > max ? ord.orderNumber : max),
-        0
-      );
-
       // Reassign order to target schedule with updated window
       await tx.mealOrder.update({
         where: { id: orderId },
         data: {
           scheduleId: targetSchedule.id,
-          orderNumber: maxOrderNumber + 1,
+          orderNumber: 5000,
           timeWindow: newTimeWindow,
           cutoffNotice: newCutoffNotice,
         },
       });
+
+      // Renormalize orders on source and target schedules
+      if (sourceScheduleId && sourceScheduleId !== targetSchedule.id) {
+        await this._normalizeScheduleOrders(tx, sourceScheduleId);
+      }
+      await this._normalizeScheduleOrders(tx, targetSchedule.id);
     });
 
     return this.getSubscription();
   }
 
-
-
   /**
    * Moves selected meal items from their source order(s) to a target order.
+   * Dynamically provisions target order on targetDate if not existing.
    */
-  async moveMealItems({ sourceOrderToItemIdsMap, targetDate, targetOrderId }) {
-    if (!sourceOrderToItemIdsMap || !targetOrderId) {
-      throw new AppError('sourceOrderToItemIdsMap and targetOrderId are required', 400);
+  async moveMealItems({ sourceOrderToItemIdsMap, targetDate, targetOrderId, targetOrderNumber }) {
+    if (!sourceOrderToItemIdsMap) {
+      throw new AppError('sourceOrderToItemIdsMap is required', 400);
     }
 
     // Verify source and target orders are editable
     for (const sourceOrderId of Object.keys(sourceOrderToItemIdsMap)) {
       await this._assertOrderEditable(sourceOrderId);
     }
-    await this._assertOrderEditable(targetOrderId);
 
     const itemIdsToMove = Object.values(sourceOrderToItemIdsMap).flat();
     if (itemIdsToMove.length === 0) {
@@ -364,10 +435,122 @@ class SubscriptionService {
     }
 
     await prisma.$transaction(async (tx) => {
+      let resolvedTargetOrderId = targetOrderId;
+
+      if (resolvedTargetOrderId) {
+        const targetOrder = await tx.mealOrder.findUnique({
+          where: { id: resolvedTargetOrderId },
+        });
+        if (!targetOrder) {
+          resolvedTargetOrderId = null;
+        } else {
+          await this._assertOrderEditable(resolvedTargetOrderId);
+        }
+      }
+
+      // If no valid targetOrderId, resolve or dynamically create target order on targetDate
+      if (!resolvedTargetOrderId) {
+        if (!targetDate) {
+          throw new AppError('targetOrderId or targetDate with slot is required', 400);
+        }
+
+        const normalizedTargetDate = normalizeDateToUtcMidnight(targetDate);
+        const firstSourceOrderId = Object.keys(sourceOrderToItemIdsMap)[0];
+        const sampleOrder = await tx.mealOrder.findUnique({
+          where: { id: firstSourceOrderId },
+          include: {
+            schedule: {
+              include: {
+                vendor: {
+                  include: {
+                    slotConfigs: {
+                      where: { isActive: true },
+                      orderBy: { displayOrder: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const vendor = sampleOrder.schedule.vendor;
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const targetDayOfWeek = dayNames[normalizedTargetDate.getUTCDay()];
+        const targetDayNumber = normalizedTargetDate.getUTCDate();
+
+        let targetSchedule = await tx.dailySchedule.findUnique({
+          where: {
+            vendorId_date: {
+              vendorId: vendor.id,
+              date: normalizedTargetDate,
+            },
+          },
+          include: { orders: true },
+        });
+
+        if (!targetSchedule) {
+          targetSchedule = await tx.dailySchedule.create({
+            data: {
+              vendorId: vendor.id,
+              date: normalizedTargetDate,
+              dayOfWeek: targetDayOfWeek,
+              dayNumber: targetDayNumber,
+            },
+            include: { orders: true },
+          });
+        }
+
+        const desiredOrderNum = targetOrderNumber ? parseInt(targetOrderNumber, 10) : 1;
+        let existingOrder = targetSchedule.orders.find((o) => o.orderNumber === desiredOrderNum);
+
+        if (!existingOrder) {
+          const slotConfig = vendor.slotConfigs[desiredOrderNum - 1] || vendor.slotConfigs[0];
+          existingOrder = await tx.mealOrder.create({
+            data: {
+              scheduleId: targetSchedule.id,
+              orderNumber: desiredOrderNum,
+              timeWindow: slotConfig.displayTime,
+              cutoffNotice: slotConfig.cutoffNoticeTemplate,
+              isSlotActive: true,
+            },
+          });
+        }
+
+        resolvedTargetOrderId = existingOrder.id;
+        await this._assertOrderEditable(resolvedTargetOrderId);
+      }
+
       await tx.mealItem.updateMany({
         where: { id: { in: itemIdsToMove } },
-        data: { orderId: targetOrderId },
+        data: { orderId: resolvedTargetOrderId },
       });
+
+      // Check affected source orders - if an order has 0 items remaining, auto-remove empty MealOrder
+      const affectedScheduleIds = new Set();
+      for (const sourceOrderId of Object.keys(sourceOrderToItemIdsMap)) {
+        const remainingCount = await tx.mealItem.count({
+          where: { orderId: sourceOrderId },
+        });
+        const srcOrder = await tx.mealOrder.findUnique({ where: { id: sourceOrderId } });
+        if (srcOrder) {
+          affectedScheduleIds.add(srcOrder.scheduleId);
+          if (remainingCount === 0) {
+            await tx.mealOrder.delete({
+              where: { id: sourceOrderId },
+            });
+          }
+        }
+      }
+
+      const targetOrder = await tx.mealOrder.findUnique({ where: { id: resolvedTargetOrderId } });
+      if (targetOrder) {
+        affectedScheduleIds.add(targetOrder.scheduleId);
+      }
+
+      for (const scheduleId of affectedScheduleIds) {
+        await this._normalizeScheduleOrders(tx, scheduleId);
+      }
     });
 
     return this.getSubscription();
@@ -437,7 +620,12 @@ class SubscriptionService {
 
       // Check affected orders - if an order has 0 items remaining, auto-remove the empty MealOrder
       const affectedOrderIds = Object.keys(orderToItemIdsMap);
+      const affectedScheduleIds = new Set();
       for (const orderId of affectedOrderIds) {
+        const order = await tx.mealOrder.findUnique({ where: { id: orderId } });
+        if (order) {
+          affectedScheduleIds.add(order.scheduleId);
+        }
         const remainingCount = await tx.mealItem.count({
           where: { orderId },
         });
@@ -446,6 +634,10 @@ class SubscriptionService {
             where: { id: orderId },
           });
         }
+      }
+
+      for (const scheduleId of affectedScheduleIds) {
+        await this._normalizeScheduleOrders(tx, scheduleId);
       }
     });
 
