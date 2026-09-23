@@ -107,7 +107,7 @@ export async function seedDatabase(options = {}) {
   }
 
   // 3. Seed Daily Schedules idempotently (Sep 14 to Sep 23, 2026)
-  const baseDate = new Date(Date.UTC(2026, 8, 15)); // Sep 15, 2026 Tuesday
+  const baseDate = new Date(Date.UTC(2026, 8, 23)); // Sep 23, 2026 Tuesday
   const daysOffset = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8];
   const shortDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
